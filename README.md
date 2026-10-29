@@ -18,3 +18,6 @@ build + install to ~/.local/bin/canvas
 - Session cookie is saved in webview cookie store  
 - Rust for api calls  
 - Every API response is cached to disk (preloading!!!)
+
+
+![dashboard](img/dashboard.png)
