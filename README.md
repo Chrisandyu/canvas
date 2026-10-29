@@ -1,5 +1,5 @@
 # Canvas
-Desktop client for canvas w/ Tauri + Svelte
+Desktop client for canvas w/ Tauri + Svelte  
 Only works for ucla canvas
 
 ## Setup (arch)
@@ -13,8 +13,8 @@ dev:
 build + install to ~/.local/bin/canvas  
 `npm run install-app`  
 
-## What it does
-Login: a window opens SSO. Session cookie is saved in webview cookie store -> rust for api calls
-Every API response is cached to disk (preloading!!!)
-
-![dashboard](img/dashboard.png)
+## How it works
+- Login w/ SSO  
+- Session cookie is saved in webview cookie store  
+- Rust for api calls  
+- Every API response is cached to disk (preloading!!!)
