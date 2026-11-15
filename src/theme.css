@@ -1,6 +1,27 @@
 /* Colors come from the active theme (see theme.ts). Layout values live here. */
+
+/* Bundled so the app looks the same on machines without the font installed (e.g. Windows). */
+@font-face {
+  font-family: "CaskaydiaCove Nerd Font";
+  font-weight: 400;
+  font-display: block;
+  src: url("./fonts/CaskaydiaCoveNerdFont-Regular.ttf") format("truetype");
+}
+@font-face {
+  font-family: "CaskaydiaCove Nerd Font";
+  font-weight: 600;
+  font-display: block;
+  src: url("./fonts/CaskaydiaCoveNerdFont-SemiBold.ttf") format("truetype");
+}
+@font-face {
+  font-family: "CaskaydiaCove Nerd Font";
+  font-weight: 700;
+  font-display: block;
+  src: url("./fonts/CaskaydiaCoveNerdFont-Bold.ttf") format("truetype");
+}
+
 :root {
-  --font: "CaskaydiaCove Nerd Font";
+  --font: "CaskaydiaCove Nerd Font", monospace;
   --radius: 8px;
   --gap: 16px;
   --pad: 20px;

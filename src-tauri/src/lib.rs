@@ -57,8 +57,9 @@ impl Site {
 
 /// Opens the site's login page in its own window. Emits `logged-in` with the site name once signed in,
 /// and `login-closed` when the window goes away (after success, or because the user closed it).
+/// Must be async: on Windows, building a webview window from a sync command deadlocks (WebView2).
 #[tauri::command]
-fn login(app: AppHandle, site: Site) -> Result<(), String> {
+async fn login(app: AppHandle, site: Site) -> Result<(), String> {
     let label = format!("login-{}", site.name());
     if let Some(existing) = app.get_webview_window(&label) {
         return existing.set_focus().map_err(|e| e.to_string());
@@ -121,6 +122,11 @@ fn cookies_file(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(app.path().app_data_dir().map_err(|e| e.to_string())?.join("cookies.json"))
 }
 
+/// Where logout stashes the Canvas session so it can be restored by "Log back in".
+fn resume_file(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(app.path().app_data_dir().map_err(|e| e.to_string())?.join("resume.json"))
+}
+
 fn save_cookies(app: &AppHandle) -> Result<(), String> {
     let main = app.get_webview_window("main").ok_or("main window missing")?;
     let mut saved = Vec::new();
@@ -172,23 +178,65 @@ async fn restore_session(app: AppHandle) -> Result<(), String> {
     apply_cookies(&app, saved)
 }
 
-/// Signs out of both sites: forgets the saved session, the webview's cookies and the downloaded data.
-/// Theme, course names and done marks live in localStorage and are kept.
+/// Restores the Canvas session stashed at the last logout. Lets the user log back in with one click,
+/// with no browser involved. Errors if there's no stash (e.g. a fresh install).
 #[tauri::command]
-async fn logout(app: AppHandle) -> Result<(), String> {
+async fn resume_session(app: AppHandle) -> Result<(), String> {
+    let file = resume_file(&app)?;
+    if !file.exists() {
+        return Err("No saved session to log back in to".into());
+    }
+    let saved: Vec<SavedCookie> =
+        serde_json::from_str(&std::fs::read_to_string(file).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?;
+    apply_cookies(&app, saved)?;
+    // Re-arm the normal saved session so future launches sign in automatically again.
+    save_cookies(&app)
+}
+
+/// Signs out of one site: forgets its webview cookies, its saved session and its downloaded data.
+/// The other site stays signed in. Theme, course names and done marks live in localStorage and are kept.
+#[tauri::command]
+async fn logout(app: AppHandle, site: Site) -> Result<(), String> {
     let main = app.get_webview_window("main").ok_or("main window missing")?;
-    for site in SITES {
-        for c in main.cookies_for_url(site.base().parse().unwrap()).map_err(|e| e.to_string())? {
-            main.delete_cookie(c).map_err(|e| e.to_string())?;
-        }
+    let cookies = main.cookies_for_url(site.base().parse().unwrap()).map_err(|e| e.to_string())?;
+    // Stash the Canvas session before clearing it, so "Log back in" can restore it without needing
+    // a browser. The session cookie is never written to the browser's disk store, so this is the
+    // only way back in offline once the live cookies are gone.
+    if matches!(site, Site::Canvas) {
+        let saved: Vec<SavedCookie> = cookies
+            .iter()
+            .map(|c| SavedCookie {
+                name: c.name().into(),
+                value: c.value().into(),
+                domain: c.domain().map(Into::into),
+                path: c.path().map(Into::into),
+                secure: c.secure().unwrap_or(false),
+                http_only: c.http_only().unwrap_or(false),
+            })
+            .collect();
+        let file = resume_file(&app)?;
+        std::fs::create_dir_all(file.parent().unwrap()).map_err(|e| e.to_string())?;
+        std::fs::write(&file, serde_json::to_string(&saved).unwrap()).map_err(|e| e.to_string())?;
+        restrict_to_user(&file)?;
     }
-    let file = cookies_file(&app)?;
-    if file.exists() {
-        std::fs::remove_file(file).map_err(|e| e.to_string())?;
+    for c in cookies {
+        main.delete_cookie(c).map_err(|e| e.to_string())?;
     }
-    let cache = app.path().app_cache_dir().map_err(|e| e.to_string())?;
+    // Rewrite the saved session with whatever cookies remain (i.e. the other site's), so signing
+    // out of one site doesn't sign the user out of the other on the next launch.
+    save_cookies(&app)?;
+    // Drop only this site's cached pages.
+    let cache = app.path().app_cache_dir().map_err(|e| e.to_string())?.join(site.name());
     if cache.exists() {
         std::fs::remove_dir_all(cache).map_err(|e| e.to_string())?;
+    }
+    // Downloaded Canvas files aren't site-foldered; clear them when signing out of Canvas.
+    if matches!(site, Site::Canvas) {
+        let files = app.path().app_cache_dir().map_err(|e| e.to_string())?.join("files");
+        if files.exists() {
+            std::fs::remove_dir_all(files).map_err(|e| e.to_string())?;
+        }
     }
     Ok(())
 }
@@ -203,9 +251,9 @@ async fn import_browser_session(app: AppHandle) -> Result<(), String> {
 }
 
 #[cfg(target_os = "linux")]
-const NO_SESSION: &str = "No Firefox or Chrome window signed into Bruin Learn was found";
+const NO_SESSION: &str = "No firefox/chrome window signed into bruinlearnfound";
 #[cfg(not(target_os = "linux"))]
-const NO_SESSION: &str = "No Firefox window signed into Bruin Learn was found";
+const NO_SESSION: &str = "No firefox signed into bruinlearn found";
 
 /// Login cookies from the first browser that is signed into Bruin Learn: Firefox, then Chrome.
 fn browser_cookies(home: &std::path::Path) -> Result<Option<Vec<SavedCookie>>, String> {
@@ -399,7 +447,7 @@ pub fn run() {
                 .build()
                 .unwrap(),
         )
-        .invoke_handler(tauri::generate_handler![login, logout, restore_session, import_browser_session, api_get, gradescope_get, cache_get, open_file])
+        .invoke_handler(tauri::generate_handler![login, logout, restore_session, resume_session, import_browser_session, api_get, gradescope_get, cache_get, open_file])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

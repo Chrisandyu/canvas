@@ -1,5 +1,6 @@
 <script lang="ts">
   import { logout } from "./api";
+  import { gradescope, connectGradescope, disconnectGradescope } from "./gradescope.svelte";
   import { datePrefs, setFullDate } from "./time.svelte";
   import { ACCENTS, FEATURED, defaultTheme, fetchScheme, listSchemes, loadTheme, saveTheme } from "./theme";
 
@@ -38,8 +39,19 @@
 
 <h2>Account</h2>
 <div class="current panel">
-  <span>Signed in to Bruin Learn and Gradescope</span>
+  <span>Signed in to Bruin Learn</span>
   <button class="reset" onclick={logout}>Log out</button>
+</div>
+<div class="current panel">
+  {#if gradescope.connected === false}
+    <span class="muted">Not connected to Gradescope</span>
+    <button class="reset" onclick={connectGradescope}>Log in</button>
+  {:else if gradescope.connected}
+    <span>Connected to Gradescope</span>
+    <button class="reset" onclick={disconnectGradescope}>Log out</button>
+  {:else}
+    <span class="muted">Checking Gradescope…</span>
+  {/if}
 </div>
 
 <h2>Due dates</h2>

@@ -1,4 +1,4 @@
-import { ensureLogin, gradescopeCached, gradescopeFresh } from "./api";
+import { ensureLogin, gradescopeCached, gradescopeFresh, logoutGradescope } from "./api";
 
 export type GsAssignment = {
   id: string;
@@ -98,4 +98,10 @@ export async function readGradescopeCache(): Promise<void> {
 export async function connectGradescope(): Promise<void> {
   await ensureLogin("gradescope");
   await refreshGradescope();
+}
+
+export async function disconnectGradescope(): Promise<void> {
+  await logoutGradescope();
+  gradescope.connected = false;
+  gradescope.byName = {};
 }

@@ -9,6 +9,9 @@
   import Splash from "./Splash.svelte";
   import { undoMark } from "./status.svelte";
   import { start, store } from "./store.svelte";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
+
+  const quit = () => getCurrentWindow().close();
 
   let ready = $state(false);
 
@@ -47,11 +50,16 @@
 {#if !ready}
   <Splash onReady={enter} {auto} />
 {:else}
-  <nav>
+  <!-- The window has no OS title bar (decorations: false), so this nav doubles as the drag
+       handle on Windows and macOS. data-tauri-drag-region starts the native window drag;
+       the links inside are children, so they stay clickable. -->
+  <nav data-tauri-drag-region>
     <a href="#/" class:active={hash === "#/" || courseId}>Dashboard</a>
     <a href="#/grades" class:active={hash === "#/grades"}>Grades</a>
     <a href="#/settings" class:active={hash === "#/settings"}>Settings</a>
+    <span class="spacer"></span>
     {#if store.offline}<span class="offline">Offline · showing saved data</span>{/if}
+    <button class="exit" onclick={quit} title="Quit Canvas">Exit</button>
   </nav>
 
   <main>
@@ -84,10 +92,25 @@
     align-items: center;
     padding: 12px 40px;
     border-bottom: 1px solid var(--border);
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  /* Pushes the offline note and Exit button to the right edge; also a draggable gap. */
+  .spacer {
+    margin-left: auto;
   }
   .offline {
-    margin-left: auto;
     color: var(--yellow);
+    margin-right: 8px;
+  }
+  /* Matches the plain nav links: no border, no background, no hover change. */
+  .exit {
+    background: none;
+    border: none;
+    padding: 6px 12px;
+    border-radius: var(--radius);
+    color: var(--text);
+    cursor: pointer;
   }
   nav a {
     padding: 6px 12px;

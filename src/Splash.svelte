@@ -41,6 +41,12 @@
 
   const manual = () => attempt(() => ensureLogin("canvas"));
 
+  // Restores the session stashed at the last logout — no browser needed.
+  const resume = () =>
+    attempt(() => invoke("resume_session")).then((ok) => {
+      if (!ok) error ??= "No saved session to log back in to. Log in manually instead.";
+    });
+
   // On launch: the session saved last time, then Firefox and Chrome. The menu only shows if both fail.
   // svelte-ignore state_referenced_locally
   if (auto) {
@@ -50,10 +56,12 @@
   }
 </script>
 
-<div class="splash">
+<div class="splash" data-tauri-drag-region>
   <h1>CANVAS</h1>
 
   {#if !busy}
+    <button class="link" onclick={resume}>Log back in</button>
+    <span class="or">OR</span>
     <button class="link" onclick={manual}>Log in manually</button>
     <span class="or">OR</span>
     <button class="link" onclick={detect}>Detect browser session</button>
@@ -75,6 +83,8 @@
     font-weight: 700;
     letter-spacing: 0.12em;
     margin: 0 0 28px;
+    user-select: none;
+    -webkit-user-select: none;
   }
   .link {
     background: none;

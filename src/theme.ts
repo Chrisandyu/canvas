@@ -23,8 +23,6 @@ export type Scheme = {
 
 /** Accent presets, chosen to read well on both dark and light themes. Any hex colour works too. */
 export const ACCENTS: { name: string; hex: string }[] = [
-  { name: "UCLA Gold", hex: "#ffd100" },
-  { name: "UCLA Blue", hex: "#2774ae" },
   { name: "Red", hex: "#ef4444" },
   { name: "Orange", hex: "#f97316" },
   { name: "Amber", hex: "#f59e0b" },
@@ -57,26 +55,26 @@ export const FEATURED = [
 ];
 
 const DEFAULT: Theme = {
-  accent: "#ffd100",
+  accent: "#ec4899", // Pink
   scheme: {
-    name: "UCLA",
-    background: "#121417",
-    foreground: "#e6e8eb",
-    black: "#1b1e23",
-    red: "#ff6b6b",
-    green: "#6bd68a",
-    yellow: "#ffd100",
-    blue: "#4d9be6",
-    purple: "#b48ead",
-    cyan: "#5fb3b3",
-    white: "#c0c5ce",
-    brightBlack: "#4f5560",
-    brightRed: "#ff8787",
-    brightGreen: "#8be0a2",
-    brightYellow: "#ffe066",
-    brightBlue: "#8bb8e8",
-    brightPurple: "#c9a7c2",
-    brightCyan: "#7fcaca",
+    name: "Hacktober",
+    background: "#141414",
+    foreground: "#c9c9c9",
+    black: "#191918",
+    red: "#b34538",
+    green: "#587744",
+    yellow: "#d08949",
+    blue: "#206ec5",
+    purple: "#864651",
+    cyan: "#ac9166",
+    white: "#f1eee7",
+    brightBlack: "#464444",
+    brightRed: "#b33323",
+    brightGreen: "#42824a",
+    brightYellow: "#c75a22",
+    brightBlue: "#5389c5",
+    brightPurple: "#e795a5",
+    brightCyan: "#ebc587",
     brightWhite: "#ffffff",
   },
 };

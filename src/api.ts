@@ -88,7 +88,12 @@ export type Site = "canvas" | "gradescope";
 // One login window per site; every request that hits a signed-out response waits on the same promise.
 const logins: Partial<Record<Site, Promise<void>>> = {};
 
+// Set once a Canvas logout starts. Without it, the still-running refresh loop hits a 401 the moment
+// cookies are cleared and pops the sign-in window open right as the user is logging out.
+let signingOut = false;
+
 export function ensureLogin(site: Site): Promise<void> {
+  if (signingOut) return Promise.reject("signing out");
   logins[site] ??= (async () => {
     let done!: () => void;
     let fail!: (reason: string) => void;
@@ -110,10 +115,17 @@ export function ensureLogin(site: Site): Promise<void> {
 /** Hash the app reloads with after logging out, so the start screen doesn't sign straight back in. */
 export const LOGGED_OUT = "#/logged-out";
 
+/** Signs out of Canvas: clears the session, then reloads to the start screen. */
 export async function logout(): Promise<void> {
-  await invoke("logout");
+  signingOut = true;
+  await invoke("logout", { site: "canvas" });
   location.hash = LOGGED_OUT;
   location.reload();
+}
+
+/** Signs out of Gradescope only. The app stays open and signed in to Canvas. */
+export async function logoutGradescope(): Promise<void> {
+  await invoke("logout", { site: "gradescope" });
 }
 
 /** True when Bruin Learn accepts the current session. Network errors are thrown, not treated as signed out. */
