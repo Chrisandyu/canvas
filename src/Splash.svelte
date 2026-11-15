@@ -2,7 +2,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { ensureLogin, signedIn } from "./api";
 
-  /** `auto` tries the saved and Firefox sessions on its own; off right after logging out. */
+  /** `auto` tries the saved and browser sessions on its own; off right after logging out. */
   let { onReady, auto }: { onReady: () => void; auto: boolean } = $props();
 
   // `auto` only matters on mount.
@@ -10,7 +10,10 @@
   let busy = $state(auto);
   let error = $state<string>();
 
-  /** Runs one sign-in attempt; enters the app if Bruin Learn accepts the session afterwards. */
+  /**
+   * Runs one sign-in attempt; enters the app if Bruin Learn accepts the session afterwards.
+   * Offline, the session can't be checked, so the app opens with its saved data.
+   */
   async function attempt(step: () => Promise<unknown>): Promise<boolean> {
     busy = true;
     error = undefined;
@@ -21,6 +24,10 @@
         return true;
       }
     } catch (e) {
+      if (e === "offline") {
+        onReady();
+        return true;
+      }
       error = String(e);
     }
     busy = false;
@@ -29,12 +36,12 @@
 
   const detect = () =>
     attempt(() => invoke("import_browser_session")).then((ok) => {
-      if (!ok) error ??= "The Firefox session has expired. Open Bruin Learn in Firefox, then try again.";
+      if (!ok) error ??= "The browser session has expired. Open Bruin Learn in your browser, then try again.";
     });
 
   const manual = () => attempt(() => ensureLogin("canvas"));
 
-  // On launch: the session saved last time, then Firefox. The menu only shows if both fail.
+  // On launch: the session saved last time, then Firefox and Chrome. The menu only shows if both fail.
   // svelte-ignore state_referenced_locally
   if (auto) {
     attempt(() => invoke("restore_session")).then((ok) => {

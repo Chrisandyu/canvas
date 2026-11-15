@@ -1,3 +1,5 @@
+#[cfg(target_os = "linux")]
+mod chrome;
 mod firefox;
 
 use serde::{Deserialize, Serialize};
@@ -7,6 +9,16 @@ use tauri::webview::{Cookie, PageLoadEvent};
 use tauri::{AppHandle, Emitter, Manager, Url, WebviewUrl, WebviewWindowBuilder};
 
 const UNAUTHORIZED: &str = "unauthorized";
+/// Returned when a request can't reach the server at all, so the app can keep showing saved data.
+const OFFLINE: &str = "offline";
+
+fn send_error(e: reqwest::Error) -> String {
+    if e.is_connect() || e.is_timeout() {
+        OFFLINE.into()
+    } else {
+        e.to_string()
+    }
+}
 
 const SITES: [Site; 2] = [Site::Canvas, Site::Gradescope];
 
@@ -92,6 +104,9 @@ fn session_cookie(app: &AppHandle, site: Site) -> Result<String, String> {
 
 /// A cookie as stored on disk. WebKit drops session cookies on exit, and both sites use them,
 /// so the app keeps its own copy to stay signed in across restarts.
+/// Sites whose login cookies are copied from a browser.
+pub const SESSION_HOSTS: [&str; 2] = ["bruinlearn.ucla.edu", "gradescope.com"];
+
 #[derive(Serialize, Deserialize)]
 pub struct SavedCookie {
     pub name: String,
@@ -128,9 +143,20 @@ fn write_cookies(app: &AppHandle, saved: &[SavedCookie]) -> Result<(), String> {
     let file = cookies_file(app)?;
     std::fs::create_dir_all(file.parent().unwrap()).map_err(|e| e.to_string())?;
     std::fs::write(&file, serde_json::to_string(saved).unwrap()).map_err(|e| e.to_string())?;
-    // Session cookies are as good as a password; keep them readable by this user only.
+    restrict_to_user(&file)
+}
+
+/// Session cookies are as good as a password; keep them readable by this user only.
+#[cfg(unix)]
+fn restrict_to_user(file: &std::path::Path) -> Result<(), String> {
     use std::os::unix::fs::PermissionsExt;
-    std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o600)).map_err(|e| e.to_string())
+    std::fs::set_permissions(file, std::fs::Permissions::from_mode(0o600)).map_err(|e| e.to_string())
+}
+
+/// On Windows the app data folder is already private to the user's account.
+#[cfg(windows)]
+fn restrict_to_user(_file: &std::path::Path) -> Result<(), String> {
+    Ok(())
 }
 
 /// Puts saved cookies back into the webview cookie store. Called once before the first request.
@@ -171,9 +197,25 @@ async fn logout(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 async fn import_browser_session(app: AppHandle) -> Result<(), String> {
     let home = app.path().home_dir().map_err(|e| e.to_string())?;
-    let cookies = firefox::session_cookies(&home)?;
+    let cookies = browser_cookies(&home)?.ok_or(NO_SESSION)?;
     write_cookies(&app, &cookies)?;
     apply_cookies(&app, cookies)
+}
+
+#[cfg(target_os = "linux")]
+const NO_SESSION: &str = "No Firefox or Chrome window signed into Bruin Learn was found";
+#[cfg(not(target_os = "linux"))]
+const NO_SESSION: &str = "No Firefox window signed into Bruin Learn was found";
+
+/// Login cookies from the first browser that is signed into Bruin Learn: Firefox, then Chrome.
+fn browser_cookies(home: &std::path::Path) -> Result<Option<Vec<SavedCookie>>, String> {
+    if let Some(cookies) = firefox::session_cookies(home)? {
+        return Ok(Some(cookies));
+    }
+    #[cfg(target_os = "linux")]
+    return chrome::session_cookies(home);
+    #[cfg(not(target_os = "linux"))]
+    Ok(None)
 }
 
 fn apply_cookies(app: &AppHandle, saved: Vec<SavedCookie>) -> Result<(), String> {
@@ -216,6 +258,29 @@ fn cache_write(app: &AppHandle, site: Site, path: &str, body: &str) -> Result<()
     std::fs::write(&file, body).map_err(|e| e.to_string())
 }
 
+/// One page of a Canvas API response, plus the URL of the next page if there is one.
+async fn canvas_page(client: &reqwest::Client, cookie: &str, url: &str) -> Result<(Value, Option<String>), String> {
+    let res = client
+        .get(url)
+        .header("Cookie", cookie)
+        .header("Accept", "application/json")
+        .send()
+        .await
+        .map_err(send_error)?;
+    if res.status() == reqwest::StatusCode::UNAUTHORIZED {
+        return Err(UNAUTHORIZED.into());
+    }
+    if !res.status().is_success() {
+        return Err(format!("{url} returned {}", res.status()));
+    }
+    let next = next_link(res.headers());
+    let body = res.text().await.map_err(send_error)?;
+    // Canvas prefixes session-authenticated JSON with `while(1);` to block JSON hijacking.
+    let json = body.strip_prefix("while(1);").unwrap_or(&body);
+    let value = serde_json::from_str(json).map_err(|e| format!("{url}: {e}"))?;
+    Ok((value, next))
+}
+
 /// GET a Canvas API path (e.g. `/courses`), following pagination. Arrays are concatenated.
 #[tauri::command]
 async fn api_get(
@@ -228,24 +293,9 @@ async fn api_get(
     let mut pages: Vec<Value> = Vec::new();
 
     while let Some(u) = url {
-        let res = client
-            .get(&u)
-            .header("Cookie", &cookie)
-            .header("Accept", "application/json")
-            .send()
-            .await
-            .map_err(|e| e.to_string())?;
-        if res.status() == reqwest::StatusCode::UNAUTHORIZED {
-            return Err(UNAUTHORIZED.into());
-        }
-        if !res.status().is_success() {
-            return Err(format!("{} returned {}", path, res.status()));
-        }
-        url = next_link(res.headers());
-        let body = res.text().await.map_err(|e| e.to_string())?;
-        // Canvas prefixes session-authenticated JSON with `while(1);` to block JSON hijacking.
-        let json = body.strip_prefix("while(1);").unwrap_or(&body);
-        pages.push(serde_json::from_str(json).map_err(|e| format!("{path}: {e}"))?);
+        let (page, next) = canvas_page(&client, &cookie, &u).await?;
+        pages.push(page);
+        url = next;
     }
 
     let value = if pages.len() == 1 {
@@ -276,7 +326,7 @@ async fn gradescope_get(
         .header("Cookie", &cookie)
         .send()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(send_error)?;
     // Signed out: some pages answer 401, others redirect to the login page.
     if res.status() == reqwest::StatusCode::UNAUTHORIZED || res.url().path().starts_with("/login") {
         return Err(UNAUTHORIZED.into());
@@ -284,9 +334,47 @@ async fn gradescope_get(
     if !res.status().is_success() {
         return Err(format!("Gradescope {} returned {}", path, res.status()));
     }
-    let body = res.text().await.map_err(|e| e.to_string())?;
+    let body = res.text().await.map_err(send_error)?;
     cache_write(&app, Site::Gradescope, &path, &body)?;
     Ok(body)
+}
+
+/// Opens a Canvas file in the system's default app. Each file is downloaded once into the cache,
+/// so later opens are instant and work offline.
+#[tauri::command]
+async fn open_file(app: AppHandle, client: tauri::State<'_, reqwest::Client>, id: u64) -> Result<(), String> {
+    let dir = app.path().app_cache_dir().map_err(|e| e.to_string())?.join("files");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let prefix = format!("{id}-");
+    let existing = std::fs::read_dir(&dir)
+        .map_err(|e| e.to_string())?
+        .flatten()
+        .map(|f| f.path())
+        .find(|p| p.file_name().unwrap().to_string_lossy().starts_with(&prefix));
+
+    let path = match existing {
+        Some(p) => p,
+        None => {
+            let cookie = session_cookie(&app, Site::Canvas)?;
+            let url = format!("{}/api/v1/files/{id}", Site::Canvas.base());
+            let (meta, _) = canvas_page(&client, &cookie, &url).await?;
+            let name = meta["display_name"].as_str().ok_or("file has no name")?.replace(['/', '\0'], "_");
+            let download = meta["url"].as_str().ok_or("file has no download link")?;
+            // reqwest drops the Cookie header when Canvas redirects to its file storage host.
+            let res = client.get(download).header("Cookie", &cookie).send().await.map_err(send_error)?;
+            if !res.status().is_success() {
+                return Err(format!("Downloading {name} returned {}", res.status()));
+            }
+            let bytes = res.bytes().await.map_err(send_error)?;
+            let path = dir.join(format!("{prefix}{name}"));
+            // Write then rename, so a failed download never leaves a half file that looks complete.
+            let partial = dir.join(format!(".{prefix}partial"));
+            std::fs::write(&partial, &bytes).map_err(|e| e.to_string())?;
+            std::fs::rename(&partial, &path).map_err(|e| e.to_string())?;
+            path
+        }
+    };
+    tauri_plugin_opener::open_path(path, None::<&str>).map_err(|e| e.to_string())
 }
 
 /// Last cached response body for a path, or null if never fetched.
@@ -307,10 +395,11 @@ pub fn run() {
         .manage(
             reqwest::Client::builder()
                 .user_agent("Canvas/0.1")
+                .connect_timeout(std::time::Duration::from_secs(10))
                 .build()
                 .unwrap(),
         )
-        .invoke_handler(tauri::generate_handler![login, logout, restore_session, import_browser_session, api_get, gradescope_get, cache_get])
+        .invoke_handler(tauri::generate_handler![login, logout, restore_session, import_browser_session, api_get, gradescope_get, cache_get, open_file])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

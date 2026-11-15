@@ -1,14 +1,18 @@
+<script module lang="ts">
+  export type Tab = "assignments" | "posts" | "materials";
+</script>
+
 <script lang="ts">
   import AssignmentRow from "./AssignmentRow.svelte";
-  import { externalLinks, withoutEmbeds } from "./links";
+  import Materials from "./Materials.svelte";
+  import { externalLinks, safeHtml } from "./links";
   import { courseCode, courseTitle } from "./names.svelte";
   import { split } from "./status.svelte";
   import { assignmentsOf, courseById, store } from "./store.svelte";
   import { shortDate } from "./time.svelte";
 
-  let { id }: { id: number } = $props();
+  let { id, tab }: { id: number; tab: Tab } = $props();
 
-  let tab = $state<"assignments" | "posts">("assignments");
   let openPost = $state<number>();
 
   let course = $derived(courseById(id));
@@ -22,8 +26,9 @@
 {/if}
 
 <div class="tabs">
-  <button class:active={tab === "assignments"} onclick={() => (tab = "assignments")}>Assignments</button>
-  <button class:active={tab === "posts"} onclick={() => (tab = "posts")}>Posts</button>
+  <a href="#/course/{id}" class:active={tab === "assignments"}>Assignments</a>
+  <a href="#/course/{id}/posts" class:active={tab === "posts"}>Posts</a>
+  <a href="#/course/{id}/materials" class:active={tab === "materials"}>Materials</a>
 </div>
 
 {#if store.errors[id]}
@@ -32,6 +37,8 @@
 
 {#if !store.groups[id]}
   <p class="muted">Loading…</p>
+{:else if tab === "materials"}
+  <Materials courseId={id} />
 {:else if tab === "assignments"}
   {#if parts.pastDue.length}
     <h2>Past due</h2>
@@ -67,7 +74,7 @@
           <span class="muted">{shortDate(p.posted_at)}</span>
         </button>
         {#if openPost === p.id}
-          <div class="message" use:externalLinks>{@html withoutEmbeds(p.message)}</div>
+          <div class="message" use:externalLinks>{@html safeHtml(p.message)}</div>
         {/if}
       </li>
     {:else}
@@ -89,14 +96,16 @@
     gap: 8px;
     margin-bottom: 8px;
   }
-  .tabs button {
+  .tabs a {
+    color: var(--text);
+    text-decoration: none;
     background: none;
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 7px 16px;
     cursor: pointer;
   }
-  .tabs button.active {
+  .tabs a.active {
     border-color: var(--accent);
     box-shadow: inset 0 0 0 1px var(--accent);
     color: var(--accent);

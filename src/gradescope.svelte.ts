@@ -82,7 +82,8 @@ export async function refreshGradescope(): Promise<void> {
     gradescope.error = undefined;
   } catch (e) {
     if (e === "unauthorized") gradescope.connected = false;
-    else gradescope.error = String(e);
+    // Being offline is shown once for the whole app, not per site.
+    else if (e !== "offline") gradescope.error = String(e);
   }
 }
 

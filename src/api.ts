@@ -48,11 +48,37 @@ export type Post = {
   author?: { display_name: string };
 };
 
+export type ModuleItem = {
+  id: number;
+  type: "File" | "Page" | "Assignment" | "Quiz" | "Discussion" | "SubHeader" | "ExternalUrl" | "ExternalTool";
+  title: string;
+  indent: number;
+  html_url?: string;
+  content_id?: number;
+  page_url?: string;
+  external_url?: string;
+};
+
+export type Module = {
+  id: number;
+  name: string;
+  /** Canvas leaves this out when a module has too many items; they're then fetched separately. */
+  items?: ModuleItem[];
+};
+
+export type Page = {
+  title: string;
+  body: string | null;
+};
+
 export const paths = {
   courses: "/courses?enrollment_state=active&include[]=total_scores&per_page=100",
   groups: (courseId: number) =>
     `/courses/${courseId}/assignment_groups?include[]=assignments&include[]=submission` +
     `&exclude_response_fields[]=rubric&per_page=100`,
+  modules: (courseId: number) => `/courses/${courseId}/modules?include[]=items&per_page=100`,
+  moduleItems: (courseId: number, moduleId: number) => `/courses/${courseId}/modules/${moduleId}/items?per_page=100`,
+  page: (courseId: number, url: string) => `/courses/${courseId}/pages/${url}`,
   posts: (courseId: number) =>
     `/courses/${courseId}/discussion_topics?only_announcements=true&per_page=100`,
 };

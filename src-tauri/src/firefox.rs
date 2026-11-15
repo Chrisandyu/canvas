@@ -3,12 +3,11 @@
 //! Both sites sign in with session cookies, which Firefox never writes to `cookies.sqlite`.
 //! It keeps them in its session-restore file instead: lz4-compressed JSON in Mozilla's "mozlz4" wrapper.
 
-use crate::SavedCookie;
+use crate::{SavedCookie, SESSION_HOSTS};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-const HOSTS: [&str; 2] = ["bruinlearn.ucla.edu", "gradescope.com"];
 const MAGIC: &[u8] = b"mozLz40\0";
 
 #[derive(Deserialize)]
@@ -42,7 +41,7 @@ struct Origin {
 /// Session files of every Firefox profile, newest first. `recovery.jsonlz4` exists while Firefox
 /// runs; `sessionstore.jsonlz4` is written on exit when "restore previous session" is on.
 fn session_files(home: &Path) -> Vec<PathBuf> {
-    let roots = [home.join(".mozilla/firefox"), home.join(".config/mozilla/firefox")];
+    let roots = profile_roots(home);
     let mut files: Vec<(SystemTime, PathBuf)> = roots
         .iter()
         .filter_map(|root| std::fs::read_dir(root).ok())
@@ -58,6 +57,22 @@ fn session_files(home: &Path) -> Vec<PathBuf> {
     files.into_iter().map(|(_, f)| f).collect()
 }
 
+/// Folders that hold Firefox profile folders on this OS.
+#[cfg(target_os = "linux")]
+fn profile_roots(home: &Path) -> Vec<PathBuf> {
+    vec![home.join(".mozilla/firefox"), home.join(".config/mozilla/firefox")]
+}
+
+#[cfg(target_os = "macos")]
+fn profile_roots(home: &Path) -> Vec<PathBuf> {
+    vec![home.join("Library/Application Support/Firefox/Profiles")]
+}
+
+#[cfg(windows)]
+fn profile_roots(home: &Path) -> Vec<PathBuf> {
+    vec![home.join(r"AppData\Roaming\Mozilla\Firefox\Profiles")]
+}
+
 fn read_session(file: &Path) -> Result<Session, String> {
     let data = std::fs::read(file).map_err(|e| format!("{}: {e}", file.display()))?;
     if !data.starts_with(MAGIC) {
@@ -70,16 +85,16 @@ fn read_session(file: &Path) -> Result<Session, String> {
 
 /// Cookies for both sites from the newest Firefox session that is signed into Bruin Learn.
 /// Cookies from containers and third-party partitions are skipped.
-pub fn session_cookies(home: &Path) -> Result<Vec<SavedCookie>, String> {
+pub fn session_cookies(home: &Path) -> Result<Option<Vec<SavedCookie>>, String> {
     for file in session_files(home) {
         let cookies: Vec<FfCookie> = read_session(&file)?
             .cookies
             .into_iter()
             .filter(|c| c.origin.partition_key.is_empty() && c.origin.container == 0)
-            .filter(|c| HOSTS.iter().any(|h| c.host.trim_start_matches('.').ends_with(h)))
+            .filter(|c| SESSION_HOSTS.iter().any(|h| c.host.trim_start_matches('.').ends_with(h)))
             .collect();
         if cookies.iter().any(|c| c.host.ends_with("bruinlearn.ucla.edu") && c.name == "canvas_session") {
-            return Ok(cookies
+            return Ok(Some(cookies
                 .into_iter()
                 .map(|c| SavedCookie {
                     name: c.name,
@@ -89,8 +104,8 @@ pub fn session_cookies(home: &Path) -> Result<Vec<SavedCookie>, String> {
                     secure: c.secure,
                     http_only: c.httponly,
                 })
-                .collect());
+                .collect()));
         }
     }
-    Err("No Firefox session signed into Bruin Learn was found".into())
+    Ok(None)
 }

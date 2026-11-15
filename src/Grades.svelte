@@ -2,11 +2,12 @@
   import { courseGrade, letter, officialScore } from "./grades";
   import { courseCode, courseTitle } from "./names.svelte";
   import { store } from "./store.svelte";
+  import { sortCourses } from "./order.svelte";
   import type { Assignment } from "./api";
   import { gradescopeFor, scoreOf } from "./status.svelte";
 
   let rows = $derived(
-    (store.courses ?? [])
+    sortCourses(store.courses ?? [])
       .filter((c) => store.groups[c.id]?.some((g) => g.assignments.length))
       .map((c) => ({
         c,

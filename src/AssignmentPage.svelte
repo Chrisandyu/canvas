@@ -1,6 +1,6 @@
 <script lang="ts">
   import { openUrl } from "@tauri-apps/plugin-opener";
-  import { externalLinks, withoutEmbeds } from "./links";
+  import { externalLinks, safeHtml } from "./links";
   import { courseTitle } from "./names.svelte";
   import { doneReason, gradescopeFor, isMarked, openTarget, scoreOf, toggleMark, toolOf } from "./status.svelte";
   import { assignmentsOf, courseById } from "./store.svelte";
@@ -58,7 +58,7 @@
   </div>
 
   {#if a.description}
-    <div class="description" use:externalLinks>{@html withoutEmbeds(a.description)}</div>
+    <div class="description" use:externalLinks>{@html safeHtml(a.description)}</div>
   {:else}
     <p class="muted">No description.</p>
   {/if}

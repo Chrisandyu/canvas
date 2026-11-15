@@ -13,11 +13,21 @@ export function externalLinks(node: HTMLElement) {
 }
 
 /**
- * Canvas HTML with embedded pages (Google Docs, videos) swapped for links. Embeds render as blank
- * white boxes in the app's webview, and some navigate the whole window away to a sign-in page.
+ * Canvas HTML made safe to render inside the app. Anything that runs here can call the app's own
+ * commands, which use the user's login, so scripts, inline event handlers and `javascript:` links are
+ * removed. Embedded pages (Google Docs, videos) are swapped for links: they render as blank boxes, and
+ * some navigate the whole window away to a sign-in page.
  */
-export function withoutEmbeds(html: string): string {
+export function safeHtml(html: string): string {
   const doc = new DOMParser().parseFromString(html, "text/html");
+  doc.querySelectorAll("script, object, embed, base, form, meta, link").forEach((el) => el.remove());
+  for (const el of doc.body.querySelectorAll("*")) {
+    for (const attr of [...el.attributes]) {
+      const isHandler = attr.name.startsWith("on");
+      const isScriptUrl = /^\s*javascript:/i.test(attr.value);
+      if (isHandler || isScriptUrl) el.removeAttribute(attr.name);
+    }
+  }
   for (const frame of doc.querySelectorAll("iframe")) {
     if (!frame.src) {
       frame.remove();

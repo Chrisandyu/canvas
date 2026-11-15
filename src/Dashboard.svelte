@@ -5,10 +5,57 @@
   import { connectGradescope, gradescope } from "./gradescope.svelte";
   import { split } from "./status.svelte";
   import { clock } from "./time.svelte";
+  import { moveCourse, sortCourses } from "./order.svelte";
 
   const WEEK = 7 * 24 * 60 * 60 * 1000;
 
   let editing = $state<number>();
+
+  let courses = $derived(sortCourses(store.courses ?? []));
+
+  // Drag to reorder: press on a card and move past a small threshold to start dragging.
+  // Built on pointer events; HTML drag-and-drop is unreliable inside the Tauri webview.
+  const DRAG_THRESHOLD = 6;
+  let press: { id: number; x: number; y: number } | undefined;
+  let dragging = $state<number>();
+  /** Set when a drag just ended, so the release doesn't also open the course. */
+  let justDragged = false;
+  /**
+   * Card under the mouse. Tracked here instead of CSS :hover because WebKit leaves :hover stale on
+   * cards that were moved during a drag.
+   */
+  let hovered = $state<number>();
+
+  function cardAt(x: number, y: number): number | undefined {
+    const card = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-course]");
+    return card ? Number(card.dataset.course) : undefined;
+  }
+
+  function onPointerDown(e: PointerEvent, id: number) {
+    if (e.button === 0) press = { id, x: e.clientX, y: e.clientY };
+  }
+
+  function onPointerMove(e: PointerEvent) {
+    hovered = cardAt(e.clientX, e.clientY);
+    if (!press) return;
+    if (dragging === undefined) {
+      if (Math.hypot(e.clientX - press.x, e.clientY - press.y) < DRAG_THRESHOLD) return;
+      dragging = press.id;
+    }
+    if (hovered !== undefined && hovered !== dragging) moveCourse(courses, dragging, hovered);
+  }
+
+  function onPointerUp(e: PointerEvent) {
+    hovered = cardAt(e.clientX, e.clientY);
+    justDragged = dragging !== undefined;
+    press = undefined;
+    dragging = undefined;
+  }
+
+  function onCardClick(e: MouseEvent) {
+    if (justDragged) e.preventDefault();
+    justDragged = false;
+  }
 
   // Every course's assignments, tagged with a short course label for the row.
   let all = $derived(
@@ -49,9 +96,16 @@
   <p class="error">{store.errors[0]}</p>
 {/if}
 
+<!-- pointerout with no relatedTarget means the mouse left the window. -->
+<svelte:window
+  onpointermove={onPointerMove}
+  onpointerup={onPointerUp}
+  onpointerout={(e) => !e.relatedTarget && (hovered = undefined)}
+/>
+
 {#if store.courses}
-  <div class="grid">
-    {#each store.courses as c (c.id)}
+  <div class="grid" class:sorting={dragging !== undefined}>
+    {#each courses as c (c.id)}
       {#if editing === c.id}
         <div class="card panel">
           <span class="code">{courseCode(c) || "N/A"}</span>
@@ -65,7 +119,16 @@
           />
         </div>
       {:else}
-        <a class="card panel" href="#/course/{c.id}">
+        <a
+          class="card panel"
+          class:dragging={dragging === c.id}
+          class:hover={dragging === undefined && hovered === c.id}
+          href="#/course/{c.id}"
+          data-course={c.id}
+          draggable="false"
+          onpointerdown={(e) => onPointerDown(e, c.id)}
+          onclick={onCardClick}
+        >
           <span class="code">{courseCode(c) || "N/A"}</span>
           <span class="name">{courseTitle(c)}</span>
           <button
@@ -152,7 +215,16 @@
     color: var(--text);
     text-decoration: none;
   }
-  a.card:hover {
+  .card {
+    user-select: none;
+  }
+  .card.dragging {
+    opacity: 0.5;
+  }
+  .sorting .card {
+    cursor: grabbing;
+  }
+  a.card.hover {
     border-color: var(--accent);
     box-shadow: inset 0 0 0 1px var(--accent);
   }
@@ -182,7 +254,7 @@
     cursor: pointer;
     opacity: 0;
   }
-  .card:hover .rename {
+  .card.hover .rename {
     opacity: 1;
   }
   .rename:hover {
