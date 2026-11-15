@@ -27,11 +27,20 @@ export function urgency(iso: string): Urgency {
   return "later";
 }
 
+const FULL_DATE_KEY = "fullDate";
+
+/** Whether dates show month and day ("Sun, Nov 15, 23:59") or just weekday and time ("Sun 23:59"). */
+export const datePrefs = $state({ full: localStorage.getItem(FULL_DATE_KEY) !== "false" });
+
+export function setFullDate(full: boolean): void {
+  datePrefs.full = full;
+  localStorage.setItem(FULL_DATE_KEY, String(full));
+}
+
 export function shortDate(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
     weekday: "short",
-    month: "short",
-    day: "numeric",
+    ...(datePrefs.full && { month: "short", day: "numeric" }),
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,

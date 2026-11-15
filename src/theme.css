@@ -12,6 +12,7 @@ body {
   color: var(--text);
   font-family: var(--font);
   font-size: 15px;
+  font-weight: 600;
   line-height: 1.5;
 }
 
@@ -23,13 +24,14 @@ main {
 
 h1 {
   font-size: 1.6em;
+  font-weight: 700;
   margin: 8px 0 24px;
 }
 
 h2 {
-  font-size: 1.05em;
-  color: var(--muted);
-  font-weight: 500;
+  font-size: 1.1em;
+  color: var(--text);
+  font-weight: 700;
   margin: 36px 0 14px;
 }
 
@@ -62,8 +64,16 @@ input {
   border-radius: var(--radius);
 }
 
+b,
+strong {
+  font-weight: 700;
+}
+
 details > summary {
   cursor: pointer;
-  color: var(--muted);
+  color: var(--text);
+  font-weight: 700;
   margin: 36px 0 14px;
 }
+
+

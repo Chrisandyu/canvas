@@ -1,3 +1,5 @@
+mod firefox;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::PathBuf;
@@ -41,7 +43,8 @@ impl Site {
     }
 }
 
-/// Opens the site's login page in its own window. Emits `logged-in` with the site name once signed in.
+/// Opens the site's login page in its own window. Emits `logged-in` with the site name once signed in,
+/// and `login-closed` when the window goes away (after success, or because the user closed it).
 #[tauri::command]
 fn login(app: AppHandle, site: Site) -> Result<(), String> {
     let label = format!("login-{}", site.name());
@@ -49,7 +52,7 @@ fn login(app: AppHandle, site: Site) -> Result<(), String> {
         return existing.set_focus().map_err(|e| e.to_string());
     }
     let url: Url = format!("{}/login", site.base()).parse().unwrap();
-    WebviewWindowBuilder::new(&app, label, WebviewUrl::External(url))
+    let window = WebviewWindowBuilder::new(&app, label, WebviewUrl::External(url))
         .title(format!("Log in to {}", site.name()))
         .inner_size(520.0, 720.0)
         .on_page_load(move |window, payload| {
@@ -66,6 +69,11 @@ fn login(app: AppHandle, site: Site) -> Result<(), String> {
         })
         .build()
         .map_err(|e| e.to_string())?;
+    window.on_window_event(move |e| {
+        if matches!(e, tauri::WindowEvent::Destroyed) {
+            app.emit("login-closed", site.name()).unwrap();
+        }
+    });
     Ok(())
 }
 
@@ -85,13 +93,13 @@ fn session_cookie(app: &AppHandle, site: Site) -> Result<String, String> {
 /// A cookie as stored on disk. WebKit drops session cookies on exit, and both sites use them,
 /// so the app keeps its own copy to stay signed in across restarts.
 #[derive(Serialize, Deserialize)]
-struct SavedCookie {
-    name: String,
-    value: String,
-    domain: Option<String>,
-    path: Option<String>,
-    secure: bool,
-    http_only: bool,
+pub struct SavedCookie {
+    pub name: String,
+    pub value: String,
+    pub domain: Option<String>,
+    pub path: Option<String>,
+    pub secure: bool,
+    pub http_only: bool,
 }
 
 fn cookies_file(app: &AppHandle) -> Result<PathBuf, String> {
@@ -113,9 +121,13 @@ fn save_cookies(app: &AppHandle) -> Result<(), String> {
             });
         }
     }
+    write_cookies(app, &saved)
+}
+
+fn write_cookies(app: &AppHandle, saved: &[SavedCookie]) -> Result<(), String> {
     let file = cookies_file(app)?;
     std::fs::create_dir_all(file.parent().unwrap()).map_err(|e| e.to_string())?;
-    std::fs::write(&file, serde_json::to_string(&saved).unwrap()).map_err(|e| e.to_string())?;
+    std::fs::write(&file, serde_json::to_string(saved).unwrap()).map_err(|e| e.to_string())?;
     // Session cookies are as good as a password; keep them readable by this user only.
     use std::os::unix::fs::PermissionsExt;
     std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o600)).map_err(|e| e.to_string())
@@ -131,6 +143,40 @@ async fn restore_session(app: AppHandle) -> Result<(), String> {
     let saved: Vec<SavedCookie> =
         serde_json::from_str(&std::fs::read_to_string(file).map_err(|e| e.to_string())?)
             .map_err(|e| e.to_string())?;
+    apply_cookies(&app, saved)
+}
+
+/// Signs out of both sites: forgets the saved session, the webview's cookies and the downloaded data.
+/// Theme, course names and done marks live in localStorage and are kept.
+#[tauri::command]
+async fn logout(app: AppHandle) -> Result<(), String> {
+    let main = app.get_webview_window("main").ok_or("main window missing")?;
+    for site in SITES {
+        for c in main.cookies_for_url(site.base().parse().unwrap()).map_err(|e| e.to_string())? {
+            main.delete_cookie(c).map_err(|e| e.to_string())?;
+        }
+    }
+    let file = cookies_file(&app)?;
+    if file.exists() {
+        std::fs::remove_file(file).map_err(|e| e.to_string())?;
+    }
+    let cache = app.path().app_cache_dir().map_err(|e| e.to_string())?;
+    if cache.exists() {
+        std::fs::remove_dir_all(cache).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Copies the Bruin Learn and Gradescope logins from Firefox into the app and saves them.
+#[tauri::command]
+async fn import_browser_session(app: AppHandle) -> Result<(), String> {
+    let home = app.path().home_dir().map_err(|e| e.to_string())?;
+    let cookies = firefox::session_cookies(&home)?;
+    write_cookies(&app, &cookies)?;
+    apply_cookies(&app, cookies)
+}
+
+fn apply_cookies(app: &AppHandle, saved: Vec<SavedCookie>) -> Result<(), String> {
     let main = app.get_webview_window("main").ok_or("main window missing")?;
     for c in saved {
         let mut cookie = Cookie::build((c.name, c.value)).secure(c.secure).http_only(c.http_only);
@@ -264,7 +310,7 @@ pub fn run() {
                 .build()
                 .unwrap(),
         )
-        .invoke_handler(tauri::generate_handler![login, restore_session, api_get, gradescope_get, cache_get])
+        .invoke_handler(tauri::generate_handler![login, logout, restore_session, import_browser_session, api_get, gradescope_get, cache_get])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

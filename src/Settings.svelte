@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { ACCENTS, FEATURED, defaultTheme, fetchScheme, listSchemes, loadTheme, saveTheme, type Accent } from "./theme";
+  import { logout } from "./api";
+  import { datePrefs, setFullDate } from "./time.svelte";
+  import { ACCENTS, FEATURED, defaultTheme, fetchScheme, listSchemes, loadTheme, saveTheme } from "./theme";
 
   let theme = $state(loadTheme());
   let all = $state<string[]>([]);
@@ -21,7 +23,7 @@
     }
   }
 
-  function setAccent(accent: Accent) {
+  function setAccent(accent: string) {
     theme = { ...theme, accent };
     saveTheme(theme);
   }
@@ -32,8 +34,21 @@
   }
 </script>
 
-<h1>Themes</h1>
+<h1>Settings</h1>
 
+<h2>Account</h2>
+<div class="current panel">
+  <span>Signed in to Bruin Learn and Gradescope</span>
+  <button class="reset" onclick={logout}>Log out</button>
+</div>
+
+<h2>Due dates</h2>
+<label class="current panel toggle">
+  <span>Show month and day <span class="muted">({datePrefs.full ? "Sun, Nov 15, 23:59" : "Sun 23:59"})</span></span>
+  <input type="checkbox" checked={datePrefs.full} onchange={(e) => setFullDate(e.currentTarget.checked)} />
+</label>
+
+<h2>Theme</h2>
 <div class="current panel">
   <div>
     <span class="muted">Current</span>
@@ -44,15 +59,19 @@
 
 <h2>Accent</h2>
 <div class="swatches">
-  {#each ACCENTS as key (key)}
+  {#each ACCENTS as { name, hex } (hex)}
     <button
       class="swatch"
-      class:selected={theme.accent === key}
-      style:background={theme.scheme[key]}
-      title={key}
-      onclick={() => setAccent(key)}
+      class:selected={theme.accent === hex}
+      style:background={hex}
+      title={name}
+      onclick={() => setAccent(hex)}
     ></button>
   {/each}
+  <label class="custom" title="Custom colour">
+    <input type="color" value={theme.accent} oninput={(e) => setAccent(e.currentTarget.value)} />
+    Custom
+  </label>
 </div>
 
 <h2>Popular</h2>
@@ -78,6 +97,35 @@
     align-items: center;
     padding: 12px var(--pad);
   }
+  .toggle {
+    cursor: pointer;
+  }
+  /* Drawn by hand: WebKitGTK's native checkbox draws its tick outside a resized box. */
+  .toggle input {
+    appearance: none;
+    flex: none;
+    width: 20px;
+    height: 20px;
+    margin: 0;
+    display: grid;
+    place-content: center;
+    border: 2px solid var(--muted);
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  .toggle input:checked {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .toggle input:checked::after {
+    content: "";
+    width: 5px;
+    height: 10px;
+    margin-top: -2px;
+    border: solid var(--bg);
+    border-width: 0 2.5px 2.5px 0;
+    transform: rotate(45deg);
+  }
   .current b {
     margin-left: 8px;
   }
@@ -90,17 +138,40 @@
   }
   .swatches {
     display: flex;
-    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
   }
   .swatch {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    border: 2px solid transparent;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    border: none;
     cursor: pointer;
+    outline: 2px solid transparent;
+    outline-offset: 3px;
+  }
+  .swatch:hover {
+    transform: scale(1.08);
   }
   .swatch.selected {
-    border-color: var(--text);
+    outline-color: var(--text);
+  }
+  .custom {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: 8px;
+    cursor: pointer;
+  }
+  .custom input {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: none;
+    cursor: pointer;
   }
   .chips {
     display: flex;
@@ -114,6 +185,7 @@
   .chip:hover,
   .chip.selected {
     border-color: var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
   }
   .search {
     width: 100%;
@@ -123,6 +195,7 @@
   }
   .search:focus {
     border-color: var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
   }
   .all {
     display: grid;

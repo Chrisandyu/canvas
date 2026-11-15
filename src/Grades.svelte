@@ -12,7 +12,6 @@
         c,
         result: courseGrade(c, store.groups[c.id], scoreOf),
         official: officialScore(c),
-        unreleased: store.groups[c.id].flatMap((g) => g.assignments).filter(isUnreleased).length,
       })),
   );
 
@@ -28,16 +27,15 @@
 
 
 <ul class="list">
-  {#each rows as { c, result, official, unreleased } (c.id)}
+  {#each rows as { c, result, official } (c.id)}
     <li class="panel">
       <details>
         <summary class="course">
           <span>
             <span class="code">{courseCode(c) || "N/A"}</span>
             <span class="name">{courseTitle(c)}</span>
-            {#if unreleased}<span class="muted small">· {unreleased} graded, not released</span>{/if}
           </span>
-          <span class="official muted">
+          <span class="official">
             Canvas: {official !== null ? pct(official) : "hidden"}
           </span>
           {#if result.percent !== null}
@@ -52,14 +50,14 @@
             <div class="group">
               <div class="group-head">
                 <span>{g.group.name}</span>
-                <span class="muted">{result.weighted ? `${g.group.group_weight}% of grade` : ""}</span>
-                <span class="muted">{g.possible ? `${+g.earned.toFixed(2)} / ${g.possible}` : ""}</span>
+                <span>{result.weighted ? `${g.group.group_weight}% of grade` : ""}</span>
+                <span>{g.possible ? `${+g.earned.toFixed(2)} / ${g.possible}` : ""}</span>
                 <span>{g.percent !== null ? pct(g.percent) : "—"}</span>
               </div>
               {#each g.group.assignments as a (a.id)}
                 <div class="assignment" class:dropped={g.dropped.has(a.id)}>
                   <span>{a.name}</span>
-                  <span class="muted">
+                  <span>
                     {#if a.submission?.excused}Excused
                     {:else if scoreOf(a) !== null}{#if fromGradescope(a)}<span class="source">Gradescope</span>{/if}{scoreOf(a)} / {a.points_possible}
                     {:else if isUnreleased(a)}Not released / {a.points_possible}
@@ -93,11 +91,7 @@
     margin-right: 8px;
   }
   .name {
-    font-weight: 600;
-  }
-  .small {
-    font-size: 0.85em;
-    margin-left: 6px;
+    font-weight: 700;
   }
   .official {
     text-align: right;
@@ -121,7 +115,7 @@
     display: grid;
     grid-template-columns: 1fr 120px 110px 80px;
     gap: var(--gap);
-    font-weight: 600;
+    font-weight: 700;
     padding: 4px 0;
     border-bottom: 1px solid var(--border);
   }

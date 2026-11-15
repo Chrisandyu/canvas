@@ -2,9 +2,23 @@
   import Dashboard from "./Dashboard.svelte";
   import CoursePage from "./CoursePage.svelte";
   import Grades from "./Grades.svelte";
-  import Themes from "./Themes.svelte";
+  import Settings from "./Settings.svelte";
+  import { LOGGED_OUT } from "./api";
   import AssignmentPage from "./AssignmentPage.svelte";
+  import Splash from "./Splash.svelte";
   import { undoMark } from "./status.svelte";
+  import { start } from "./store.svelte";
+
+  let ready = $state(false);
+
+  // Right after logging out, the start screen waits for the user instead of signing back in.
+  const auto = location.hash !== LOGGED_OUT;
+
+  function enter() {
+    if (!auto) location.hash = "#/";
+    ready = true;
+    start();
+  }
 
   let hash = $state(location.hash || "#/");
   window.addEventListener("hashchange", () => (hash = location.hash || "#/"));
@@ -15,7 +29,7 @@
   // Escape goes up one level (assignment → course → dashboard); Ctrl+Z undoes the last done mark.
   // Inputs keep both keys for themselves.
   function onKey(e: KeyboardEvent) {
-    if (e.target instanceof HTMLInputElement) return;
+    if (!ready || e.target instanceof HTMLInputElement) return;
     if (e.key === "Escape") location.hash = assignmentId ? `#/course/${courseId}` : "#/";
     if (e.key === "z" && e.ctrlKey) undoMark();
   }
@@ -23,29 +37,33 @@
 
 <svelte:window onkeydown={onKey} />
 
-<nav>
-  <a href="#/" class:active={hash === "#/" || courseId}>Dashboard</a>
-  <a href="#/grades" class:active={hash === "#/grades"}>Grades</a>
-  <a href="#/themes" class:active={hash === "#/themes"}>Themes</a>
-</nav>
+{#if !ready}
+  <Splash onReady={enter} {auto} />
+{:else}
+  <nav>
+    <a href="#/" class:active={hash === "#/" || courseId}>Dashboard</a>
+    <a href="#/grades" class:active={hash === "#/grades"}>Grades</a>
+    <a href="#/settings" class:active={hash === "#/settings"}>Settings</a>
+  </nav>
 
-<main>
-  {#if assignmentId}
-    {#key assignmentId}
-      <AssignmentPage courseId={Number(courseId)} id={Number(assignmentId)} />
-    {/key}
-  {:else if courseId}
-    {#key courseId}
-      <CoursePage id={Number(courseId)} />
-    {/key}
-  {:else if hash === "#/grades"}
-    <Grades />
-  {:else if hash === "#/themes"}
-    <Themes />
-  {:else}
-    <Dashboard />
-  {/if}
-</main>
+  <main>
+    {#if assignmentId}
+      {#key assignmentId}
+        <AssignmentPage courseId={Number(courseId)} id={Number(assignmentId)} />
+      {/key}
+    {:else if courseId}
+      {#key courseId}
+        <CoursePage id={Number(courseId)} />
+      {/key}
+    {:else if hash === "#/grades"}
+      <Grades />
+    {:else if hash === "#/settings"}
+      <Settings />
+    {:else}
+      <Dashboard />
+    {/if}
+  </main>
+{/if}
 
 <style>
   nav {
@@ -57,7 +75,7 @@
   nav a {
     padding: 6px 12px;
     border-radius: var(--radius);
-    color: var(--muted);
+    color: var(--text);
     text-decoration: none;
   }
   nav a:hover {

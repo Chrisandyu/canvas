@@ -98,6 +98,7 @@
   }
   .tabs button.active {
     border-color: var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
     color: var(--accent);
   }
   .tabs + :not(h2) {

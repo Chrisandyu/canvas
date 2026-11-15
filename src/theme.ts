@@ -21,13 +21,31 @@ export type Scheme = {
   brightWhite: string;
 };
 
-export const ACCENTS = [
-  "red", "green", "yellow", "blue", "purple", "cyan",
-  "brightRed", "brightGreen", "brightYellow", "brightBlue", "brightPurple", "brightCyan",
-] as const;
+/** Accent presets, chosen to read well on both dark and light themes. Any hex colour works too. */
+export const ACCENTS: { name: string; hex: string }[] = [
+  { name: "UCLA Gold", hex: "#ffd100" },
+  { name: "UCLA Blue", hex: "#2774ae" },
+  { name: "Red", hex: "#ef4444" },
+  { name: "Orange", hex: "#f97316" },
+  { name: "Amber", hex: "#f59e0b" },
+  { name: "Lime", hex: "#84cc16" },
+  { name: "Green", hex: "#22c55e" },
+  { name: "Emerald", hex: "#10b981" },
+  { name: "Teal", hex: "#14b8a6" },
+  { name: "Cyan", hex: "#06b6d4" },
+  { name: "Sky", hex: "#0ea5e9" },
+  { name: "Blue", hex: "#3b82f6" },
+  { name: "Indigo", hex: "#6366f1" },
+  { name: "Violet", hex: "#8b5cf6" },
+  { name: "Purple", hex: "#a855f7" },
+  { name: "Fuchsia", hex: "#d946ef" },
+  { name: "Pink", hex: "#ec4899" },
+  { name: "Rose", hex: "#f43f5e" },
+  { name: "Slate", hex: "#94a3b8" },
+];
 
-export type Accent = (typeof ACCENTS)[number];
-export type Theme = { scheme: Scheme; accent: Accent };
+/** `accent` is a hex colour. */
+export type Theme = { scheme: Scheme; accent: string };
 
 const REPO = "mbadolato/iTerm2-Color-Schemes";
 const KEY = "theme";
@@ -39,7 +57,7 @@ export const FEATURED = [
 ];
 
 const DEFAULT: Theme = {
-  accent: "yellow",
+  accent: "#ffd100",
   scheme: {
     name: "UCLA",
     background: "#121417",
@@ -48,7 +66,7 @@ const DEFAULT: Theme = {
     red: "#ff6b6b",
     green: "#6bd68a",
     yellow: "#ffd100",
-    blue: "#2774ae",
+    blue: "#4d9be6",
     purple: "#b48ead",
     cyan: "#5fb3b3",
     white: "#c0c5ce",
@@ -83,8 +101,9 @@ export function applyTheme(t: Theme): void {
     "--surface": mix(s.background, s.foreground, 0.04),
     "--border": mix(s.background, s.foreground, 0.12),
     "--text": s.foreground,
-    "--muted": mix(s.background, s.foreground, 0.55),
-    "--accent": s[t.accent],
+    "--muted": mix(s.background, s.foreground, 0.7),
+    "--accent": t.accent,
+    "--link": s.blue,
     "--red": s.red,
     "--yellow": s.yellow,
     "--green": s.green,

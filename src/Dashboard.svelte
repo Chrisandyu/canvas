@@ -154,6 +154,7 @@
   }
   a.card:hover {
     border-color: var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
   }
   .code {
     color: var(--accent);
@@ -161,7 +162,7 @@
     min-height: 1em;
   }
   .name {
-    font-weight: 600;
+    font-weight: 700;
     padding-right: 20px;
   }
   input {

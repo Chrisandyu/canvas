@@ -106,12 +106,13 @@
   }
   .actions button:hover {
     border-color: var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
   }
   .actions .primary {
     background: var(--accent);
     border-color: var(--accent);
     color: var(--bg);
-    font-weight: 600;
+    font-weight: 700;
   }
   .description {
     line-height: 1.65;

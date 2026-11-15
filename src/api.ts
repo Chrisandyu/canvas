@@ -65,14 +65,40 @@ const logins: Partial<Record<Site, Promise<void>>> = {};
 export function ensureLogin(site: Site): Promise<void> {
   logins[site] ??= (async () => {
     let done!: () => void;
-    const loggedIn = new Promise<void>((r) => (done = r));
-    const unlisten = await listen<Site>("logged-in", (e) => e.payload === site && done());
-    await invoke("login", { site });
-    await loggedIn;
-    unlisten();
-    delete logins[site];
+    let fail!: (reason: string) => void;
+    const result = new Promise<void>((resolve, reject) => ((done = resolve), (fail = reject)));
+    const unlistenIn = await listen<Site>("logged-in", (e) => e.payload === site && done());
+    const unlistenClosed = await listen<Site>("login-closed", (e) => e.payload === site && fail("Login window was closed"));
+    try {
+      await invoke("login", { site });
+      await result;
+    } finally {
+      unlistenIn();
+      unlistenClosed();
+      delete logins[site];
+    }
   })();
   return logins[site];
+}
+
+/** Hash the app reloads with after logging out, so the start screen doesn't sign straight back in. */
+export const LOGGED_OUT = "#/logged-out";
+
+export async function logout(): Promise<void> {
+  await invoke("logout");
+  location.hash = LOGGED_OUT;
+  location.reload();
+}
+
+/** True when Bruin Learn accepts the current session. Network errors are thrown, not treated as signed out. */
+export async function signedIn(): Promise<boolean> {
+  try {
+    await invoke("api_get", { path: "/users/self" });
+    return true;
+  } catch (e) {
+    if (e === "unauthorized") return false;
+    throw e;
+  }
 }
 
 async function withLogin<T>(site: Site, request: () => Promise<T>): Promise<T> {

@@ -32,6 +32,7 @@
       {#if course}<span class="course">{course}</span>{/if}
       <span class="name">{a.name}</span>
     </span>
+    {#if status()}<span class="status">{status()}</span>{/if}
     {#if a.due_at}
       <span class="due">
         <span class={urgency(a.due_at)}>{relative(a.due_at)}</span>
@@ -40,15 +41,13 @@
     {:else}
       <span class="due muted">No due date</span>
     {/if}
-    <span class="status">{status()}</span>
   </a>
 </li>
 
 <style>
   .row {
-    display: grid;
-    grid-template-columns: 1fr 180px 110px;
-    gap: var(--gap);
+    display: flex;
+    gap: 24px;
     align-items: center;
     padding: 14px 20px;
     color: var(--text);
@@ -56,8 +55,10 @@
   }
   .row:hover {
     border-color: var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
   }
   .title {
+    flex: 1;
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
@@ -72,7 +73,9 @@
   .due {
     display: flex;
     flex-direction: column;
+    align-items: flex-end;
     gap: 2px;
+    white-space: nowrap;
   }
   .small {
     font-size: 0.85em;
@@ -85,7 +88,7 @@
     color: var(--yellow);
   }
   .status {
-    text-align: right;
     color: var(--green);
+    white-space: nowrap;
   }
 </style>
