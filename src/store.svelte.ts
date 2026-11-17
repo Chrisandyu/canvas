@@ -114,9 +114,12 @@ async function refresh(): Promise<void> {
   refreshing = false;
 }
 
+// Saved data is read from disk as soon as the app loads, while the start screen is still signing in.
+const cacheRead = Promise.all([readCache(), readGradescopeCache()]);
+
 /** Show cached data immediately, then sync from Canvas and Gradescope and keep it fresh. */
 export async function start(): Promise<void> {
-  await Promise.all([readCache(), readGradescopeCache()]);
+  await cacheRead;
   await refresh();
   setInterval(refresh, REFRESH_MS);
   window.addEventListener("focus", () => {

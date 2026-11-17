@@ -25,7 +25,7 @@
       else if (k === "pptx") await renderPptx(data, container);
       else if (k === "image") imageUrl = URL.createObjectURL(new Blob([data]));
     } catch (e) {
-      error = e === "offline" ? "This file hasn't been downloaded yet and you're offline." : String(e);
+      error = e === "offline" ? "This file hasn't been downloaded yet and you're offline" : String(e);
     }
     rendering = false;
   }
@@ -42,16 +42,16 @@
 </script>
 
 <div class="head">
-  <h1>{name ?? "Loading…"}</h1>
+  <h1>{name ?? "Loading..."}</h1>
   <button class="download" onclick={download} disabled={!name}>Download</button>
 </div>
 
 {#if savedTo}<p class="muted">Saved to {savedTo}</p>{/if}
 {#if error}<p class="error">{error}</p>{/if}
 {#if rendering && !error}<p class="muted">Loading…</p>{/if}
-{#if kind === "other"}<p class="muted">This file type can't be shown in the app. Use Download to open it in another app.</p>{/if}
+{#if kind === "other"}<p class="muted">This file type can't be shown in the app, use Download to open it in another app</p>{/if}
 
-<div class="body" bind:this={body}>
+<div class="body selectable" bind:this={body}>
   {#if imageUrl}<img src={imageUrl} alt={name} />{/if}
 </div>
 
@@ -68,7 +68,7 @@
   .download {
     flex: none;
     background: none;
-    border: 1px solid var(--border);
+    border: var(--bw) solid var(--border);
     border-radius: var(--radius);
     padding: 6px 12px;
     cursor: pointer;

@@ -12,11 +12,14 @@
   import { checkForUpdate } from "./update.svelte";
   import { undoMark } from "./status.svelte";
   import { start, store } from "./store.svelte";
+  import { keyCombo, keys } from "./keys.svelte";
+  import { SCALE_STEP, setScale, startZoom, zoom } from "./zoom.svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
 
   const quit = () => getCurrentWindow().close();
 
   checkForUpdate();
+  startZoom();
 
   let ready = $state(false);
 
@@ -38,16 +41,22 @@
   let pageUrl = $derived(hash.match(/^#\/course\/\d+\/page\/([^/]+)/)?.[1]);
   let tab = $derived((hash.match(/^#\/course\/\d+\/(posts|materials)$/)?.[1] ?? "assignments") as Tab);
 
-  // Escape goes up one level: an assignment, page or file returns to wherever it was opened from,
-  // a course returns to the dashboard. Ctrl+Z undoes the last done mark.
-  // Inputs keep both keys for themselves.
+  // Back goes up one level: an assignment, page or file returns to wherever it was opened from,
+  // a course returns to the dashboard. Inputs keep every key for themselves.
   function onKey(e: KeyboardEvent) {
-    if (!ready || e.target instanceof HTMLInputElement) return;
-    if (e.key === "Escape") {
+    if (keys.recording || e.target instanceof HTMLInputElement) return;
+    const combo = keyCombo(e);
+    const b = keys.binds;
+    if (combo === b.zoomIn) setScale(zoom.scale + SCALE_STEP);
+    else if (combo === b.zoomOut) setScale(zoom.scale - SCALE_STEP);
+    else if (combo === b.zoomReset) setScale(1);
+    else if (!ready) return;
+    else if (combo === b.back) {
       if (assignmentId || pageUrl || fileId) history.back();
       else location.hash = "#/";
-    }
-    if (e.key === "z" && e.ctrlKey) undoMark();
+    } else if (combo === b.undo) undoMark();
+    else return;
+    e.preventDefault();
   }
 </script>
 
@@ -60,7 +69,7 @@
        handle on Windows and macOS. data-tauri-drag-region starts the native window drag;
        the links inside are children, so they stay clickable. -->
   <nav data-tauri-drag-region>
-    <a href="#/" class:active={hash === "#/" || courseId}>Dashboard</a>
+    <a href="#/" class:active={hash === "#/" || hash === "#/posts" || courseId}>Dashboard</a>
     <a href="#/grades" class:active={hash === "#/grades"}>Grades</a>
     <a href="#/settings" class:active={hash === "#/settings"}>Settings</a>
     <span class="spacer"></span>
@@ -91,7 +100,7 @@
     {:else if hash === "#/settings"}
       <Settings />
     {:else}
-      <Dashboard />
+      <Dashboard tab={hash === "#/posts" ? "posts" : "assignments"} />
     {/if}
   </main>
 {/if}
@@ -103,8 +112,6 @@
     align-items: center;
     padding: 12px 40px;
     border-bottom: 1px solid var(--border);
-    user-select: none;
-    -webkit-user-select: none;
   }
   /* Pushes the offline note and Exit button to the right edge; also a draggable gap. */
   .spacer {

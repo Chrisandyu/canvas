@@ -1,28 +1,35 @@
 /* Colors come from the active theme (see theme.ts). Layout values live here. */
 
-/* Bundled so the app looks the same on machines without the font installed (e.g. Windows). */
+/*
+ * Bundled so the app looks the same on machines without the font installed (e.g. Windows).
+ * Cut down from the 3 MB Nerd Font files to every normal character plus only the icons the app
+ * uses (U+F040 F044 F059 F086 F08E F0C1 F15B F15C), so they load at once. A new icon has to be
+ * added to the list and the files made again:
+ *   pyftsubset CaskaydiaCoveNerdFont-Regular.ttf --layout-features='*' --flavor=woff2 \
+ *     --unicodes="U+0000-DFFF,U+F900-FFFF,U+F040,U+F044,..." --output-file=CaskaydiaCoveNerdFont-Regular.woff2
+ */
 @font-face {
   font-family: "CaskaydiaCove Nerd Font";
   font-weight: 400;
   font-display: block;
-  src: url("./fonts/CaskaydiaCoveNerdFont-Regular.ttf") format("truetype");
+  src: url("./fonts/CaskaydiaCoveNerdFont-Regular.woff2") format("woff2");
 }
 @font-face {
   font-family: "CaskaydiaCove Nerd Font";
   font-weight: 600;
   font-display: block;
-  src: url("./fonts/CaskaydiaCoveNerdFont-SemiBold.ttf") format("truetype");
+  src: url("./fonts/CaskaydiaCoveNerdFont-SemiBold.woff2") format("woff2");
 }
 @font-face {
   font-family: "CaskaydiaCove Nerd Font";
   font-weight: 700;
   font-display: block;
-  src: url("./fonts/CaskaydiaCoveNerdFont-Bold.ttf") format("truetype");
+  src: url("./fonts/CaskaydiaCoveNerdFont-Bold.woff2") format("woff2");
 }
 
 :root {
   --font: "CaskaydiaCove Nerd Font", monospace;
-  --radius: 8px;
+  --radius: 6px;
   --gap: 16px;
   --pad: 20px;
 }
@@ -35,6 +42,16 @@ body {
   font-size: 15px;
   font-weight: 600;
   line-height: 1.5;
+  /* App chrome isn't text to copy; content opts back in with .selectable. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+input,
+.error,
+.selectable {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 main {
@@ -46,7 +63,7 @@ main {
 h1 {
   font-size: 1.6em;
   font-weight: 700;
-  margin: 8px 0 24px;
+  margin: 4px 0 16px;
 }
 
 h2 {
@@ -81,8 +98,89 @@ input {
 
 .panel {
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: var(--bw) solid var(--border);
   border-radius: var(--radius);
+}
+/* Clickable panels brighten a little under the mouse. */
+a.panel,
+button.panel {
+  transition: background-color 120ms;
+}
+a.panel:hover,
+button.panel:hover {
+  background: var(--hover);
+}
+/* Settings option: an accent outline instead of brightening. */
+.accent-hover a.panel:hover,
+.accent-hover button.panel:hover {
+  background: var(--surface);
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+/* Settings option: heavier text throughout. */
+.bold body {
+  font-weight: 700;
+}
+
+/* Same thin scrollbars on every system; Windows otherwise draws wide light-grey ones. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border: 2px solid transparent;
+  border-radius: 5px;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--muted);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* No focus rings: the app is driven by mouse, and WebKit also draws them after clicks. */
+:focus {
+  outline: none;
+}
+
+input[type="checkbox"] {
+  appearance: none;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  display: grid;
+  place-content: center;
+  border: 1.5px solid var(--muted);
+  border-radius: 4px;
+  cursor: pointer;
+  transition:
+    background-color 120ms,
+    border-color 120ms;
+}
+input[type="checkbox"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+/* Tick from Lucide's "check" icon, cut out of the accent fill. */
+input[type="checkbox"]::after {
+  content: "";
+  width: 14px;
+  height: 14px;
+  background: var(--bg);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  transform: scale(0);
+  transition: transform 120ms;
+}
+input[type="checkbox"]:checked::after {
+  transform: scale(1);
 }
 
 b,
@@ -96,6 +194,10 @@ details > summary {
   font-weight: 700;
   margin: 36px 0 14px;
 }
+/* Folded lists one after another sit closer together. */
+details + details > summary {
+  margin-top: 20px;
+}
 
 
 /* Embedded pages inside Canvas HTML (made by safeHtml). */
@@ -107,7 +209,7 @@ details > summary {
 }
 .embed iframe {
   width: 100%;
-  border: 1px solid var(--border);
+  border: var(--bw) solid var(--border);
   border-radius: var(--radius);
   background: #fff;
 }

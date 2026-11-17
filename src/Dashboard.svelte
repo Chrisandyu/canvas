@@ -1,11 +1,17 @@
 <script lang="ts">
   import AssignmentRow from "./AssignmentRow.svelte";
+  import PostList from "./PostList.svelte";
+  import Tabs from "./Tabs.svelte";
+  import type { Post } from "./api";
+  import { dashboardPrefs } from "./dashboard.svelte";
   import { courseCode, courseTitle, renameCourse } from "./names.svelte";
   import { assignmentsOf, store } from "./store.svelte";
-  import { connectGradescope, gradescope } from "./gradescope.svelte";
+  import { gradescope } from "./gradescope.svelte";
   import { split } from "./status.svelte";
   import { clock } from "./time.svelte";
   import { moveCourse, sortCourses } from "./order.svelte";
+
+  let { tab }: { tab: "assignments" | "posts" } = $props();
 
   const WEEK = 7 * 24 * 60 * 60 * 1000;
 
@@ -71,6 +77,22 @@
   let recentPastDue = $derived(parts.pastDue.filter((a) => clock.now - Date.parse(a.due_at!) < WEEK));
   let recentDone = $derived(parts.done.filter((a) => a.due_at && clock.now - Date.parse(a.due_at) < 2 * WEEK));
 
+  let separate = $derived(dashboardPrefs.separateLater);
+  let showPosts = $derived(dashboardPrefs.posts && tab === "posts");
+
+  // Posts from every course in the last 2 weeks, newest first.
+  let posts = $derived(
+    (store.courses ?? []).flatMap((c) =>
+      (store.posts[c.id] ?? []).map((p) => ({ p, course: courseCode(c) || courseTitle(c) })),
+    ),
+  );
+  let recentPosts = $derived(
+    posts
+      .filter((x) => clock.now - Date.parse(x.p.posted_at) < 2 * WEEK)
+      .sort((x, y) => Date.parse(y.p.posted_at) - Date.parse(x.p.posted_at)),
+  );
+  let postCourse = $derived(new Map(posts.map((x) => [x.p.id, x.course])));
+
   function finish(e: Event, id: number) {
     renameCourse(id, (e.target as HTMLInputElement).value);
     editing = undefined;
@@ -82,12 +104,7 @@
   }
 </script>
 
-<div class="header">
-  <h1>Courses</h1>
-  {#if gradescope.connected === false}
-    <button class="connect" onclick={connectGradescope}>Connect Gradescope</button>
-  {/if}
-</div>
+<h1>Courses</h1>
 {#if gradescope.error}
   <p class="error">{gradescope.error}</p>
 {/if}
@@ -112,7 +129,7 @@
           <!-- svelte-ignore a11y_autofocus -->
           <input
             value={courseTitle(c)}
-            placeholder="Empty resets to Canvas name"
+            placeholder="empty"
             autofocus
             onkeydown={(e) => onKey(e, c.id)}
             onblur={(e) => finish(e, c.id)}
@@ -144,64 +161,77 @@
     {/each}
   </div>
 {:else if !store.errors[0]}
-  <p class="muted">Loading…</p>
+  <p class="muted">Loading...</p>
 {/if}
 
-{#if recentPastDue.length}
-  <h2>Past due</h2>
-  <ul class="list">
-    {#each recentPastDue as a (a.id)}
-      <AssignmentRow {a} course={label.get(a.id)} />
-    {/each}
-  </ul>
-{/if}
-
-<h2>Due this week</h2>
-<ul class="list">
-  {#each thisWeek as a (a.id)}
-    <AssignmentRow {a} course={label.get(a.id)} />
+{#snippet lists()}
+  {#if showPosts}
+    <h2>Last 2 weeks</h2>
+    <PostList
+      posts={recentPosts.map((x) => x.p)}
+      course={(p: Post) => postCourse.get(p.id)!}
+      empty="No posts in the last 2 weeks"
+    />
   {:else}
-    <li class="muted">Nothing due this week.</li>
-  {/each}
-</ul>
+    {#if recentPastDue.length}
+      <h2>Past due</h2>
+      <ul class="list">
+        {#each recentPastDue as a (a.id)}
+          <AssignmentRow {a} course={label.get(a.id)} />
+        {/each}
+      </ul>
+    {/if}
 
-{#if later.length}
-  <details>
-    <summary>Later ({later.length})</summary>
+    <h2>{separate ? "Due this week" : "Upcoming"}</h2>
     <ul class="list">
-      {#each later as a (a.id)}
+      {#each separate ? thisWeek : [...thisWeek, ...later] as a (a.id)}
         <AssignmentRow {a} course={label.get(a.id)} />
+      {:else}
+        <li class="muted">{separate ? "Nothing due this week" : "Nothing upcoming"}</li>
       {/each}
     </ul>
-  </details>
-{/if}
 
-{#if recentDone.length}
-  <details>
-    <summary>Completed in the last 2 weeks ({recentDone.length})</summary>
-    <ul class="list">
-      {#each recentDone as a (a.id)}
-        <AssignmentRow {a} course={label.get(a.id)} />
-      {/each}
-    </ul>
-  </details>
+    {#if separate && later.length}
+      <details>
+        <summary>Later ({later.length})</summary>
+        <ul class="list">
+          {#each later as a (a.id)}
+            <AssignmentRow {a} course={label.get(a.id)} />
+          {/each}
+        </ul>
+      </details>
+    {/if}
+
+    {#if recentDone.length}
+      <details>
+        <summary>Completed in the last 2 weeks ({recentDone.length})</summary>
+        <ul class="list">
+          {#each recentDone as a (a.id)}
+            <AssignmentRow {a} course={label.get(a.id)} />
+          {/each}
+        </ul>
+      </details>
+    {/if}
+  {/if}
+{/snippet}
+
+{#if dashboardPrefs.posts}
+  <Tabs
+    tabs={[
+      { href: "#/", label: "Assignments", active: !showPosts },
+      { href: "#/posts", label: "Posts", active: showPosts },
+    ]}
+  >
+    {@render lists()}
+  </Tabs>
+{:else}
+  {@render lists()}
 {/if}
 
 <style>
-  .header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-  .connect {
-    background: var(--surface);
-    border: 1px solid var(--accent);
-    color: var(--accent);
-    border-radius: var(--radius);
-    padding: 7px 14px;
-    cursor: pointer;
-  }
+  /* Collapses with the heading below when there are no tabs, so the gap is the same either way. */
   .grid {
+    margin-bottom: 36px;
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
     gap: var(--gap);
@@ -210,13 +240,10 @@
     position: relative;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 18px 20px;
+    gap: 4px;
+    padding: 14px 16px;
     color: var(--text);
     text-decoration: none;
-  }
-  .card {
-    user-select: none;
   }
   .card.dragging {
     opacity: 0.5;
@@ -224,17 +251,25 @@
   .sorting .card {
     cursor: grabbing;
   }
+  a.card:hover {
+    background: var(--surface);
+  }
   a.card.hover {
+    background: var(--hover);
+  }
+  :global(.accent-hover) a.card.hover {
+    background: var(--surface);
     border-color: var(--accent);
     box-shadow: inset 0 0 0 1px var(--accent);
   }
   .code {
     color: var(--accent);
-    font-size: 0.85em;
+    font-size: 0.9em;
+    font-weight: 700;
+    letter-spacing: 0.04em;
     min-height: 1em;
   }
   .name {
-    font-weight: 700;
     padding-right: 20px;
   }
   input {

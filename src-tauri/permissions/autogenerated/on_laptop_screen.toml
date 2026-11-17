@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-on-laptop-screen"
+description = "Enables the on_laptop_screen command without any pre-configured scope."
+commands.allow = ["on_laptop_screen"]
+
+[[permission]]
+identifier = "deny-on-laptop-screen"
+description = "Denies the on_laptop_screen command without any pre-configured scope."
+commands.deny = ["on_laptop_screen"]

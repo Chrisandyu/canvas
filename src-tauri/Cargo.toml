@@ -26,9 +26,16 @@ reqwest = { version = "0.13.5", default-features = false, features = ["json", "r
 lz4_flex = "0.14.1"
 tauri-plugin-updater = "2.14.1"
 tauri-plugin-process = "2.4.0"
+keyring = "4.2.0"
 
 # Chrome cookie import (Linux only).
 [target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-graphics = "0.25"
+
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
 rusqlite = { version = "0.42.0", features = ["bundled"] }
 aes = "0.9.4"
 cbc = "0.2.1"

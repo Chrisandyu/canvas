@@ -41,7 +41,7 @@
 </script>
 
 {#if !modules}
-  <p class="muted">Loading…</p>
+  <p class="muted">Loading...</p>
 {:else}
   <div class="modules">
     {#each modules as m (m.id)}
@@ -65,7 +65,7 @@
         </ul>
       </details>
     {:else}
-      <p class="muted">This course has no modules.</p>
+      <p class="muted">This course has no modules</p>
     {/each}
   </div>
 {/if}
@@ -101,7 +101,7 @@
     cursor: pointer;
   }
   .item:hover {
-    background: var(--bg);
+    background: var(--hover);
   }
   .item:hover .title {
     color: var(--accent);

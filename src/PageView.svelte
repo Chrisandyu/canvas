@@ -28,12 +28,12 @@
 {#if page}
   <h1>{page.title}</h1>
   {#if page.body}
-    <div class="body" use:externalLinks>{@html safeHtml(page.body)}</div>
+    <div class="body selectable" use:externalLinks>{@html safeHtml(page.body)}</div>
   {:else}
-    <p class="muted">This page is empty.</p>
+    <p class="muted">This page is empty</p>
   {/if}
 {:else if !error}
-  <p class="muted">Loading…</p>
+  <p class="muted">Loading...</p>
 {/if}
 
 <style>
@@ -58,7 +58,7 @@
   }
   .body :global(td),
   .body :global(th) {
-    border: 1px solid var(--border);
+    border: var(--bw) solid var(--border);
     padding: 4px 8px;
   }
 </style>

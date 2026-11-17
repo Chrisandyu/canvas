@@ -15,16 +15,16 @@
   let reason = $derived(a && doneReason(a));
 
   // Tools that need a launch from Canvas get an "Open in <tool>" button; plain uploads/quizzes just open Canvas.
-  let target = $derived(tool && ["Gradescope", "OWL", "Perusall"].includes(tool) ? tool : "Canvas");
+  let target = $derived(tool && ["gradescope", "OWL", "Perusall"].includes(tool) ? tool : "Canvas");
 
   function statusLine(): string {
     const s = a!.submission;
     if (s?.excused) return "Excused";
     if (s?.score != null) return `Graded: ${s.score} / ${a!.points_possible}`;
-    if (scoreOf(a!) !== null) return `Graded on Gradescope: ${scoreOf(a!)} / ${a!.points_possible}`;
+    if (scoreOf(a!) !== null) return `Graded on gradescope: ${scoreOf(a!)} / ${a!.points_possible}`;
     if (s?.workflow_state === "graded") return "Graded, score not released";
     if (s?.submitted_at) return `Submitted ${shortDate(s.submitted_at)}`;
-    if (gs) return `Gradescope: ${gs.status}`;
+    if (gs) return `gradescope: ${gs.status}`;
     if (reason === "manual") return "Marked done by you";
     return "Not submitted";
   }
@@ -58,12 +58,12 @@
   </div>
 
   {#if a.description}
-    <div class="description" use:externalLinks>{@html safeHtml(a.description)}</div>
+    <div class="description selectable" use:externalLinks>{@html safeHtml(a.description)}</div>
   {:else}
-    <p class="muted">No description.</p>
+    <p class="muted">No description</p>
   {/if}
 {:else}
-  <p class="muted">Loading…</p>
+  <p class="muted">Loading...</p>
 {/if}
 
 <style>
@@ -99,14 +99,13 @@
   }
   .actions button {
     background: var(--surface);
-    border: 1px solid var(--border);
+    border: var(--bw) solid var(--border);
     border-radius: var(--radius);
     padding: 8px 16px;
     cursor: pointer;
   }
   .actions button:hover {
     border-color: var(--accent);
-    box-shadow: inset 0 0 0 1px var(--accent);
   }
   .actions .primary {
     background: var(--accent);
@@ -131,7 +130,7 @@
   }
   .description :global(td),
   .description :global(th) {
-    border: 1px solid var(--border);
+    border: var(--bw) solid var(--border);
     padding: 4px 8px;
   }
 </style>

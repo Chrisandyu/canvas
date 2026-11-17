@@ -17,7 +17,8 @@
         "title": "Canvas",
         "width": 1100,
         "height": 760,
-        "decorations": false
+        "decorations": false,
+        "visible": false
       }
     ],
     "security": {

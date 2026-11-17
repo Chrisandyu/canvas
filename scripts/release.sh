@@ -56,4 +56,4 @@ git tag -a "$tag" -m "$title"
 git push origin HEAD
 git push origin "$tag"
 echo
-echo "Pushed. Watch the build on the Actions tab: https://github.com/Chrisandyu/canvas/actions"
+echo "pushed and building on actions tab: https://github.com/Chrisandyu/canvas/actions"

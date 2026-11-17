@@ -6,49 +6,49 @@
  */
 @font-face {
   font-family: "Calibri";
-  src: local("Calibri"), url("./fonts/Carlito-Regular.ttf");
+  src: local("Calibri"), url("./fonts/Carlito-Regular.woff2");
   font-weight: 400;
   font-style: normal;
 }
 @font-face {
   font-family: "Calibri";
-  src: local("Calibri Bold"), url("./fonts/Carlito-Bold.ttf");
+  src: local("Calibri Bold"), url("./fonts/Carlito-Bold.woff2");
   font-weight: 700;
   font-style: normal;
 }
 @font-face {
   font-family: "Calibri";
-  src: local("Calibri Italic"), url("./fonts/Carlito-Italic.ttf");
+  src: local("Calibri Italic"), url("./fonts/Carlito-Italic.woff2");
   font-weight: 400;
   font-style: italic;
 }
 @font-face {
   font-family: "Calibri";
-  src: local("Calibri Bold Italic"), url("./fonts/Carlito-BoldItalic.ttf");
+  src: local("Calibri Bold Italic"), url("./fonts/Carlito-BoldItalic.woff2");
   font-weight: 700;
   font-style: italic;
 }
 @font-face {
   font-family: "Calibri Light";
-  src: local("Calibri Light"), url("./fonts/Carlito-Regular.ttf");
+  src: local("Calibri Light"), url("./fonts/Carlito-Regular.woff2");
   font-weight: 400;
 }
 /* Aptos, Office's default since 2023, has no free copy; Carlito is the closest bundled match. */
 @font-face {
   font-family: "Aptos";
-  src: local("Aptos"), url("./fonts/Carlito-Regular.ttf");
+  src: local("Aptos"), url("./fonts/Carlito-Regular.woff2");
   font-weight: 400;
   font-style: normal;
 }
 @font-face {
   font-family: "Aptos";
-  src: local("Aptos Bold"), url("./fonts/Carlito-Bold.ttf");
+  src: local("Aptos Bold"), url("./fonts/Carlito-Bold.woff2");
   font-weight: 700;
   font-style: normal;
 }
 @font-face {
   font-family: "Aptos";
-  src: local("Aptos Italic"), url("./fonts/Carlito-Italic.ttf");
+  src: local("Aptos Italic"), url("./fonts/Carlito-Italic.woff2");
   font-weight: 400;
   font-style: italic;
 }

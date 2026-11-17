@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { rememberLogin } from "./rememberLogin.svelte";
 
 export type Course = {
   id: number;
@@ -101,7 +102,7 @@ export function ensureLogin(site: Site): Promise<void> {
     const unlistenIn = await listen<Site>("logged-in", (e) => e.payload === site && done());
     const unlistenClosed = await listen<Site>("login-closed", (e) => e.payload === site && fail("Login window was closed"));
     try {
-      await invoke("login", { site });
+      await invoke("login", { site, remember: rememberLogin.on });
       await result;
     } finally {
       unlistenIn();

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-saved-login-name"
+description = "Enables the saved_login_name command without any pre-configured scope."
+commands.allow = ["saved_login_name"]
+
+[[permission]]
+identifier = "deny-saved-login-name"
+description = "Denies the saved_login_name command without any pre-configured scope."
+commands.deny = ["saved_login_name"]

@@ -1,6 +1,7 @@
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 mod chrome;
 mod firefox;
+mod ucla_login;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -60,21 +61,34 @@ impl Site {
 /// and `login-closed` when the window goes away (after success, or because the user closed it).
 /// Must be async: on Windows, building a webview window from a sync command deadlocks (WebView2).
 #[tauri::command]
-async fn login(app: AppHandle, site: Site) -> Result<(), String> {
+async fn login(app: AppHandle, site: Site, remember: bool) -> Result<(), String> {
     let label = format!("login-{}", site.name());
     if let Some(existing) = app.get_webview_window(&label) {
         return existing.set_focus().map_err(|e| e.to_string());
     }
     let url: Url = format!("{}/login", site.base()).parse().unwrap();
     let window = WebviewWindowBuilder::new(&app, label, WebviewUrl::External(url))
-        .title(format!("Log in to {}", site.name()))
+        .title(format!(
+            "Log in to {}",
+            match site {
+                Site::Canvas => "canvas",
+                Site::Gradescope => "gradescope",
+            }
+        ))
         .inner_size(520.0, 720.0)
+        .initialization_script(ucla_login::script(remember)?)
+        // Checked when a page is committed (its first bytes arrive), not when it finishes loading,
+        // so the signed-in Canvas page isn't left on screen while it loads. The window hides at once.
         .on_page_load(move |window, payload| {
-            if payload.event() == PageLoadEvent::Finished && site.is_signed_in(payload.url()) {
+            if payload.event() == PageLoadEvent::Started && site.is_signed_in(payload.url()) {
                 let w = window.clone();
+                w.hide().unwrap();
                 tauri::async_runtime::spawn(async move {
                     if let Err(e) = save_cookies(w.app_handle()) {
                         eprintln!("saving session failed: {e}");
+                    }
+                    if let Err(e) = ucla_login::save_pending(w.app_handle(), w.label()) {
+                        eprintln!("saving UCLA login failed: {e}");
                     }
                     w.emit("logged-in", site.name()).unwrap();
                     w.close()
@@ -83,8 +97,11 @@ async fn login(app: AppHandle, site: Site) -> Result<(), String> {
         })
         .build()
         .map_err(|e| e.to_string())?;
+    let label = window.label().to_string();
     window.on_window_event(move |e| {
         if matches!(e, tauri::WindowEvent::Destroyed) {
+            // A login typed into a window that never signed in is dropped.
+            ucla_login::drop_pending(&app, &label);
             app.emit("login-closed", site.name()).unwrap();
         }
     });
@@ -93,7 +110,9 @@ async fn login(app: AppHandle, site: Site) -> Result<(), String> {
 
 /// Cookie header built from the session the login window stored in the shared webview cookie jar.
 fn session_cookie(app: &AppHandle, site: Site) -> Result<String, String> {
-    let main = app.get_webview_window("main").ok_or("main window missing")?;
+    let main = app
+        .get_webview_window("main")
+        .ok_or("main window missing")?;
     let cookies = main
         .cookies_for_url(site.base().parse().unwrap())
         .map_err(|e| e.to_string())?;
@@ -120,19 +139,32 @@ pub struct SavedCookie {
 }
 
 fn cookies_file(app: &AppHandle) -> Result<PathBuf, String> {
-    Ok(app.path().app_data_dir().map_err(|e| e.to_string())?.join("cookies.json"))
+    Ok(app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("cookies.json"))
 }
 
 /// Where logout stashes the Canvas session so it can be restored by "Log back in".
 fn resume_file(app: &AppHandle) -> Result<PathBuf, String> {
-    Ok(app.path().app_data_dir().map_err(|e| e.to_string())?.join("resume.json"))
+    Ok(app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("resume.json"))
 }
 
 fn save_cookies(app: &AppHandle) -> Result<(), String> {
-    let main = app.get_webview_window("main").ok_or("main window missing")?;
+    let main = app
+        .get_webview_window("main")
+        .ok_or("main window missing")?;
     let mut saved = Vec::new();
     for site in SITES {
-        for c in main.cookies_for_url(site.base().parse().unwrap()).map_err(|e| e.to_string())? {
+        for c in main
+            .cookies_for_url(site.base().parse().unwrap())
+            .map_err(|e| e.to_string())?
+        {
             saved.push(SavedCookie {
                 name: c.name().into(),
                 value: c.value().into(),
@@ -157,7 +189,8 @@ fn write_cookies(app: &AppHandle, saved: &[SavedCookie]) -> Result<(), String> {
 #[cfg(unix)]
 fn restrict_to_user(file: &std::path::Path) -> Result<(), String> {
     use std::os::unix::fs::PermissionsExt;
-    std::fs::set_permissions(file, std::fs::Permissions::from_mode(0o600)).map_err(|e| e.to_string())
+    std::fs::set_permissions(file, std::fs::Permissions::from_mode(0o600))
+        .map_err(|e| e.to_string())
 }
 
 /// On Windows the app data folder is already private to the user's account.
@@ -197,10 +230,17 @@ async fn resume_session(app: AppHandle) -> Result<(), String> {
 
 /// Signs out of one site: forgets its webview cookies, its saved session and its downloaded data.
 /// The other site stays signed in. Theme, course names and done marks live in localStorage and are kept.
+/// UCLA's single sign-on page, used by both Bruin Learn and Gradescope.
+const UCLA_SSO: &str = "https://shb.ais.ucla.edu";
+
 #[tauri::command]
 async fn logout(app: AppHandle, site: Site) -> Result<(), String> {
-    let main = app.get_webview_window("main").ok_or("main window missing")?;
-    let cookies = main.cookies_for_url(site.base().parse().unwrap()).map_err(|e| e.to_string())?;
+    let main = app
+        .get_webview_window("main")
+        .ok_or("main window missing")?;
+    let cookies = main
+        .cookies_for_url(site.base().parse().unwrap())
+        .map_err(|e| e.to_string())?;
     // Stash the Canvas session before clearing it, so "Log back in" can restore it without needing
     // a browser. The session cookie is never written to the browser's disk store, so this is the
     // only way back in offline once the live cookies are gone.
@@ -221,20 +261,33 @@ async fn logout(app: AppHandle, site: Site) -> Result<(), String> {
         std::fs::write(&file, serde_json::to_string(&saved).unwrap()).map_err(|e| e.to_string())?;
         restrict_to_user(&file)?;
     }
-    for c in cookies {
+    // UCLA's sign-in page keeps its own session while the app is open; without clearing it, the next
+    // manual login would sign straight back in without showing the form.
+    let sso = main
+        .cookies_for_url(UCLA_SSO.parse().unwrap())
+        .map_err(|e| e.to_string())?;
+    for c in cookies.into_iter().chain(sso) {
         main.delete_cookie(c).map_err(|e| e.to_string())?;
     }
     // Rewrite the saved session with whatever cookies remain (i.e. the other site's), so signing
     // out of one site doesn't sign the user out of the other on the next launch.
     save_cookies(&app)?;
     // Drop only this site's cached pages.
-    let cache = app.path().app_cache_dir().map_err(|e| e.to_string())?.join(site.name());
+    let cache = app
+        .path()
+        .app_cache_dir()
+        .map_err(|e| e.to_string())?
+        .join(site.name());
     if cache.exists() {
         std::fs::remove_dir_all(cache).map_err(|e| e.to_string())?;
     }
     // Downloaded Canvas files aren't site-foldered; clear them when signing out of Canvas.
     if matches!(site, Site::Canvas) {
-        let files = app.path().app_cache_dir().map_err(|e| e.to_string())?.join("files");
+        let files = app
+            .path()
+            .app_cache_dir()
+            .map_err(|e| e.to_string())?
+            .join("files");
         if files.exists() {
             std::fs::remove_dir_all(files).map_err(|e| e.to_string())?;
         }
@@ -251,26 +304,30 @@ async fn import_browser_session(app: AppHandle) -> Result<(), String> {
     apply_cookies(&app, cookies)
 }
 
-#[cfg(target_os = "linux")]
-const NO_SESSION: &str = "No firefox/chrome window signed into bruinlearnfound";
-#[cfg(not(target_os = "linux"))]
-const NO_SESSION: &str = "No firefox signed into bruinlearn found";
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+const NO_SESSION: &str = "No firefox/chrome window signed into canvas found";
+#[cfg(target_os = "windows")]
+const NO_SESSION: &str = "No firefox signed into canvas found";
 
 /// Login cookies from the first browser that is signed into Bruin Learn: Firefox, then Chrome.
 fn browser_cookies(home: &std::path::Path) -> Result<Option<Vec<SavedCookie>>, String> {
     if let Some(cookies) = firefox::session_cookies(home)? {
         return Ok(Some(cookies));
     }
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     return chrome::session_cookies(home);
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "windows")]
     Ok(None)
 }
 
 fn apply_cookies(app: &AppHandle, saved: Vec<SavedCookie>) -> Result<(), String> {
-    let main = app.get_webview_window("main").ok_or("main window missing")?;
+    let main = app
+        .get_webview_window("main")
+        .ok_or("main window missing")?;
     for c in saved {
-        let mut cookie = Cookie::build((c.name, c.value)).secure(c.secure).http_only(c.http_only);
+        let mut cookie = Cookie::build((c.name, c.value))
+            .secure(c.secure)
+            .http_only(c.http_only);
         if let Some(d) = c.domain {
             cookie = cookie.domain(d);
         }
@@ -287,13 +344,21 @@ fn next_link(headers: &reqwest::header::HeaderMap) -> Option<String> {
     let link = headers.get("link")?.to_str().ok()?;
     link.split(',').find_map(|part| {
         let (url, rel) = part.split_once(';')?;
-        rel.contains("rel=\"next\"")
-            .then(|| url.trim().trim_start_matches('<').trim_end_matches('>').to_string())
+        rel.contains("rel=\"next\"").then(|| {
+            url.trim()
+                .trim_start_matches('<')
+                .trim_end_matches('>')
+                .to_string()
+        })
     })
 }
 
 fn cache_file(app: &AppHandle, site: Site, path: &str) -> Result<PathBuf, String> {
-    let dir = app.path().app_cache_dir().map_err(|e| e.to_string())?.join(site.name());
+    let dir = app
+        .path()
+        .app_cache_dir()
+        .map_err(|e| e.to_string())?
+        .join(site.name());
     let name: String = path
         .chars()
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
@@ -308,7 +373,11 @@ fn cache_write(app: &AppHandle, site: Site, path: &str, body: &str) -> Result<()
 }
 
 /// One page of a Canvas API response, plus the URL of the next page if there is one.
-async fn canvas_page(client: &reqwest::Client, cookie: &str, url: &str) -> Result<(Value, Option<String>), String> {
+async fn canvas_page(
+    client: &reqwest::Client,
+    cookie: &str,
+    url: &str,
+) -> Result<(Value, Option<String>), String> {
     let res = client
         .get(url)
         .header("Cookie", cookie)
@@ -381,7 +450,7 @@ async fn gradescope_get(
         return Err(UNAUTHORIZED.into());
     }
     if !res.status().is_success() {
-        return Err(format!("Gradescope {} returned {}", path, res.status()));
+        return Err(format!("gradescope {} returned {}", path, res.status()));
     }
     let body = res.text().await.map_err(send_error)?;
     cache_write(&app, Site::Gradescope, &path, &body)?;
@@ -392,7 +461,11 @@ async fn gradescope_get(
 const FILE_MAX_AGE: std::time::Duration = std::time::Duration::from_secs(30 * 24 * 60 * 60);
 
 fn files_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    Ok(app.path().app_cache_dir().map_err(|e| e.to_string())?.join("files"))
+    Ok(app
+        .path()
+        .app_cache_dir()
+        .map_err(|e| e.to_string())?
+        .join("files"))
 }
 
 /// The saved copy of file `id`. Cached files are named `{id}-{display name}`.
@@ -405,7 +478,12 @@ fn find_cached(dir: &Path, id: u64) -> Result<Option<PathBuf>, String> {
         .map_err(|e| e.to_string())?
         .flatten()
         .map(|f| f.path())
-        .find(|p| p.file_name().unwrap().to_string_lossy().starts_with(&prefix)))
+        .find(|p| {
+            p.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with(&prefix)
+        }))
 }
 
 /// Marks a cached file as just opened, which keeps it from being pruned.
@@ -423,9 +501,15 @@ fn prune_files(app: &AppHandle) -> Result<(), String> {
     if !dir.exists() {
         return Ok(());
     }
-    for entry in std::fs::read_dir(&dir).map_err(|e| e.to_string())?.flatten() {
+    for entry in std::fs::read_dir(&dir)
+        .map_err(|e| e.to_string())?
+        .flatten()
+    {
         let partial = entry.file_name().to_string_lossy().ends_with("partial");
-        let modified = entry.metadata().and_then(|m| m.modified()).map_err(|e| e.to_string())?;
+        let modified = entry
+            .metadata()
+            .and_then(|m| m.modified())
+            .map_err(|e| e.to_string())?;
         let stale = modified.elapsed().is_ok_and(|age| age > FILE_MAX_AGE);
         if partial || stale {
             std::fs::remove_file(entry.path()).map_err(|e| e.to_string())?;
@@ -437,7 +521,11 @@ fn prune_files(app: &AppHandle) -> Result<(), String> {
 /// Path of the current version of a Canvas file in the cache. Canvas is asked for the file's name and
 /// size on every open, so a file the instructor replaced is downloaded again. Offline, the saved copy
 /// is used as it is.
-async fn cached_file(app: &AppHandle, client: &reqwest::Client, id: u64) -> Result<PathBuf, String> {
+async fn cached_file(
+    app: &AppHandle,
+    client: &reqwest::Client,
+    id: u64,
+) -> Result<PathBuf, String> {
     let dir = files_dir(app)?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let existing = find_cached(&dir, id)?;
@@ -452,7 +540,10 @@ async fn cached_file(app: &AppHandle, client: &reqwest::Client, id: u64) -> Resu
         }
         Err(e) => return Err(e),
     };
-    let name = meta["display_name"].as_str().ok_or("file has no name")?.replace(['/', '\\', '\0'], "_");
+    let name = meta["display_name"]
+        .as_str()
+        .ok_or("file has no name")?
+        .replace(['/', '\\', '\0'], "_");
     let path = dir.join(format!("{id}-{name}"));
     if let Some(old) = existing {
         let size = std::fs::metadata(&old).map_err(|e| e.to_string())?.len();
@@ -464,7 +555,12 @@ async fn cached_file(app: &AppHandle, client: &reqwest::Client, id: u64) -> Resu
     }
     let download = meta["url"].as_str().ok_or("file has no download link")?;
     // reqwest drops the Cookie header when Canvas redirects to its file storage host.
-    let res = client.get(download).header("Cookie", &cookie).send().await.map_err(send_error)?;
+    let res = client
+        .get(download)
+        .header("Cookie", &cookie)
+        .send()
+        .await
+        .map_err(send_error)?;
     if !res.status().is_success() {
         return Err(format!("Downloading {name} returned {}", res.status()));
     }
@@ -478,7 +574,11 @@ async fn cached_file(app: &AppHandle, client: &reqwest::Client, id: u64) -> Resu
 
 /// Makes sure the current version of a Canvas file is cached and returns its name, for the viewer.
 #[tauri::command]
-async fn download_file(app: AppHandle, client: tauri::State<'_, reqwest::Client>, id: u64) -> Result<String, String> {
+async fn download_file(
+    app: AppHandle,
+    client: tauri::State<'_, reqwest::Client>,
+    id: u64,
+) -> Result<String, String> {
     let path = cached_file(&app, &client, id).await?;
     let file_name = path.file_name().unwrap().to_string_lossy();
     Ok(file_name[format!("{id}-").len()..].to_string())
@@ -488,7 +588,9 @@ async fn download_file(app: AppHandle, client: tauri::State<'_, reqwest::Client>
 #[tauri::command]
 fn read_file(app: AppHandle, id: u64) -> Result<tauri::ipc::Response, String> {
     let path = find_cached(&files_dir(&app)?, id)?.ok_or("file isn't downloaded")?;
-    Ok(tauri::ipc::Response::new(std::fs::read(path).map_err(|e| e.to_string())?))
+    Ok(tauri::ipc::Response::new(
+        std::fs::read(path).map_err(|e| e.to_string())?,
+    ))
 }
 
 /// Copies a cached file into the user's Downloads folder, adding " (2)" etc. if the name is taken.
@@ -503,7 +605,13 @@ fn save_file(app: AppHandle, id: u64) -> Result<String, String> {
         None => (name.clone(), String::new()),
     };
     let target = (1..)
-        .map(|n| downloads.join(if n == 1 { name.clone() } else { format!("{stem} ({n}){ext}") }))
+        .map(|n| {
+            downloads.join(if n == 1 {
+                name.clone()
+            } else {
+                format!("{stem} ({n}){ext}")
+            })
+        })
         .find(|p| !p.exists())
         .unwrap();
     std::fs::copy(&cached, &target).map_err(|e| e.to_string())?;
@@ -517,7 +625,60 @@ fn cache_get(app: AppHandle, site: Site, path: String) -> Result<Option<String>,
     if !file.exists() {
         return Ok(None);
     }
-    std::fs::read_to_string(file).map(Some).map_err(|e| e.to_string())
+    std::fs::read_to_string(file)
+        .map(Some)
+        .map_err(|e| e.to_string())
+}
+
+/// Laptop screens are narrower than this; desktop monitors start at about 21 inches (470 mm wide).
+#[cfg(target_os = "linux")]
+const LAPTOP_MAX_WIDTH_MM: i32 = 400;
+
+/// Whether the window is on a laptop's own screen. Linux goes by the screen's physical width, macOS
+/// asks the system whether the screen is built in. Windows has no reliable way to tell, so it always
+/// says no.
+#[tauri::command]
+fn on_laptop_screen(window: tauri::WebviewWindow) -> Result<bool, String> {
+    #[cfg(target_os = "linux")]
+    {
+        use gtk::prelude::*;
+        let gtk_window = window.gtk_window().map_err(|e| e.to_string())?;
+        let gdk_window = gtk_window
+            .window()
+            .ok_or("The window isn't on screen yet")?;
+        let monitor = gtk_window
+            .display()
+            .monitor_at_window(&gdk_window)
+            .ok_or("No screen found for the window")?;
+        Ok(monitor.width_mm() > 0 && monitor.width_mm() < LAPTOP_MAX_WIDTH_MM)
+    }
+    #[cfg(target_os = "macos")]
+    {
+        use core_graphics::display::CGDisplay;
+        // Tauri names Mac screens "Monitor #N", so the screen is found by its top-left corner, which
+        // Tauri reports in physical pixels and macOS in points.
+        let monitor = window
+            .current_monitor()
+            .map_err(|e| e.to_string())?
+            .ok_or("No screen found for the window")?;
+        let scale = monitor.scale_factor();
+        let (x, y) = (monitor.position().x as f64 / scale, monitor.position().y as f64 / scale);
+        let display = CGDisplay::active_displays()
+            .map_err(|e| format!("Listing screens failed ({e})"))?
+            .into_iter()
+            .map(CGDisplay::new)
+            .find(|d| {
+                let origin = d.bounds().origin;
+                (origin.x - x).abs() < 1.0 && (origin.y - y).abs() < 1.0
+            })
+            .ok_or("No screen found for the window")?;
+        Ok(display.is_builtin())
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let _ = window;
+        Ok(false)
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -534,8 +695,25 @@ pub fn run() {
                 .build()
                 .unwrap(),
         )
+        .manage(ucla_login::PendingLogins::default())
         .setup(|app| Ok(prune_files(app.handle())?))
-        .invoke_handler(tauri::generate_handler![login, logout, restore_session, resume_session, import_browser_session, api_get, gradescope_get, cache_get, download_file, read_file, save_file])
+        .invoke_handler(tauri::generate_handler![
+            login,
+            logout,
+            restore_session,
+            resume_session,
+            import_browser_session,
+            api_get,
+            gradescope_get,
+            cache_get,
+            download_file,
+            read_file,
+            save_file,
+            on_laptop_screen,
+            ucla_login::stash_login,
+            ucla_login::saved_login_name,
+            ucla_login::forget_login
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

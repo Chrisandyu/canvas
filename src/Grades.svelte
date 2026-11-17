@@ -48,7 +48,7 @@
         <div class="groups">
           {#if store.errors[c.id]}<p class="error">{store.errors[c.id]}</p>{/if}
           {#if !result.groups.some((g) => g.group.assignments.length)}
-            <p class="muted">No assignments on Bruin Learn.</p>
+            <p class="muted">No assignments on canvas</p>
           {/if}
           {#each result.groups as g (g.group.id)}
             <div class="group">
@@ -63,7 +63,7 @@
                   <span>{a.name}</span>
                   <span>
                     {#if a.submission?.excused}Excused
-                    {:else if scoreOf(a) !== null}{#if fromGradescope(a)}<span class="source">Gradescope</span>{/if}{scoreOf(a)} / {a.points_possible}
+                    {:else if scoreOf(a) !== null}{#if fromGradescope(a)}<span class="source">gradescope</span>{/if}{scoreOf(a)} / {a.points_possible}
                     {:else if isUnreleased(a)}Not released / {a.points_possible}
                     {:else}— / {a.points_possible ?? "?"}{/if}
                   </span>
@@ -75,7 +75,7 @@
       </details>
     </li>
   {:else}
-    <li class="muted">Loading…</li>
+    <li class="muted">Loading...</li>
   {/each}
 </ul>
 

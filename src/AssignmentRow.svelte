@@ -2,13 +2,16 @@
   import type { Assignment } from "./api";
   import { doneReason, gradescopeFor, scoreOf, toggleMark } from "./status.svelte";
   import { relative, shortDate, urgency } from "./time.svelte";
+  import { clickCombo, keys } from "./keys.svelte";
 
   let { a, course }: { a: Assignment; course?: string } = $props();
 
   let reason = $derived(doneReason(a));
 
-  // Right-click toggles a manual done mark. Work already submitted on Canvas or Gradescope stays done.
-  function onContextMenu(e: MouseEvent) {
+  // The mark click (right click by default) toggles a manual done mark. Work already submitted on
+  // Canvas or Gradescope stays done.
+  function onMouseDown(e: MouseEvent) {
+    if (clickCombo(e) !== keys.binds.mark) return;
     e.preventDefault();
     if (reason === null || reason === "manual") toggleMark(a.id);
   }
@@ -27,7 +30,8 @@
 </script>
 
 <li>
-  <a class="row panel" class:done={reason} href="#/course/{a.course_id}/a/{a.id}" oncontextmenu={onContextMenu}>
+  <a class="row panel" class:done={reason} href="#/course/{a.course_id}/a/{a.id}" onmousedown={onMouseDown}
+    oncontextmenu={(e) => e.preventDefault()}>
     <span class="title">
       {#if course}<span class="course">{course}</span>{/if}
       <span class="name">{a.name}</span>
@@ -52,10 +56,6 @@
     padding: 14px 20px;
     color: var(--text);
     text-decoration: none;
-  }
-  .row:hover {
-    border-color: var(--accent);
-    box-shadow: inset 0 0 0 1px var(--accent);
   }
   .title {
     flex: 1;

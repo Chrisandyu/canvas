@@ -98,6 +98,8 @@ export function applyTheme(t: Theme): void {
     "--bg": s.background,
     "--surface": mix(s.background, s.foreground, 0.04),
     "--border": mix(s.background, s.foreground, 0.12),
+    /** Background of a clickable panel under the mouse. */
+    "--hover": mix(s.background, s.foreground, 0.08),
     "--text": s.foreground,
     "--muted": mix(s.background, s.foreground, 0.7),
     "--accent": t.accent,

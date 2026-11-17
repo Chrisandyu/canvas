@@ -81,7 +81,7 @@ export function toolOf(a: Assignment): string | null {
   const url = a.external_tool_tag_attributes?.url;
   if (url) {
     const host = new URL(url).hostname;
-    if (host.includes("gradescope")) return "Gradescope";
+    if (host.includes("gradescope")) return "gradescope";
     if (host.includes("cengage")) return "OWL";
     if (host.includes("perusall")) return "Perusall";
     if (host.includes("quiz-lti")) return "Quiz";

@@ -1,8 +1,8 @@
-//! Reads the Bruin Learn and Gradescope login cookies out of Chrome, Chromium or Brave on Linux.
+//! Reads the Bruin Learn and Gradescope login cookies out of Chrome, Chromium or Brave on Linux and
+//! macOS.
 //!
 //! Each profile keeps cookies in an SQLite file, session cookies included, with values encrypted by
-//! AES-128-CBC. The key comes from the password "peanuts" (`v10` values, no keyring) or from a
-//! secret the browser stored in the desktop keyring (`v11` values).
+//! AES-128-CBC. The key is derived from a password that depends on the OS (see `os`).
 
 use crate::{SavedCookie, SESSION_HOSTS};
 use aes::cipher::{BlockModeDecrypt, KeyIvInit, block_padding::Pkcs7};
@@ -11,56 +11,97 @@ use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-/// Config folder under `~/.config`, and the `application` name its keyring secret is stored under.
-const BROWSERS: [(&str, &str); 4] = [
-    ("google-chrome", "chrome"),
-    ("google-chrome-beta", "chrome"),
-    ("chromium", "chromium"),
-    ("BraveSoftware/Brave-Browser", "brave"),
-];
+#[cfg(target_os = "linux")]
+mod os {
+    /// Folder under the home folder that holds each browser's data.
+    pub const DATA: &str = ".config";
+    /// Data folder, and the `application` name its keyring secret is stored under.
+    pub const BROWSERS: [(&str, &str); 4] = [
+        ("google-chrome", "chrome"),
+        ("google-chrome-beta", "chrome"),
+        ("chromium", "chromium"),
+        ("BraveSoftware/Brave-Browser", "brave"),
+    ];
+    pub const ITERATIONS: u32 = 1;
+
+    /// `v10` values use the fixed password "peanuts"; `v11` values use a secret in the desktop
+    /// keyring, which may show an unlock prompt.
+    pub fn password(version: &[u8], secret: &str) -> Result<Vec<u8>, String> {
+        match version {
+            b"v10" => Ok(b"peanuts".to_vec()),
+            b"v11" => {
+                let out = std::process::Command::new("secret-tool")
+                    .args(["lookup", "application", secret])
+                    .output()
+                    .map_err(|e| format!("Reading Chrome's key from the keyring needs secret-tool: {e}"))?;
+                if !out.status.success() || out.stdout.is_empty() {
+                    return Err(format!("Chrome's key ({secret}) was not found in the keyring"));
+                }
+                Ok(out.stdout)
+            }
+            other => Err(format!("Unknown Chrome cookie encryption {}", String::from_utf8_lossy(other))),
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+mod os {
+    /// Folder under the home folder that holds each browser's data.
+    pub const DATA: &str = "Library/Application Support";
+    /// Data folder, and the name of its "<name> Safe Storage" Keychain item.
+    pub const BROWSERS: [(&str, &str); 3] = [
+        ("Google/Chrome", "Chrome"),
+        ("Chromium", "Chromium"),
+        ("BraveSoftware/Brave-Browser", "Brave"),
+    ];
+    pub const ITERATIONS: u32 = 1003;
+
+    /// `v10` values use a password in the login Keychain. macOS asks the user for their Mac
+    /// password before handing it over.
+    pub fn password(version: &[u8], secret: &str) -> Result<Vec<u8>, String> {
+        if version != b"v10" {
+            return Err(format!("Unknown Chrome cookie encryption {}", String::from_utf8_lossy(version)));
+        }
+        let out = std::process::Command::new("security")
+            .args(["find-generic-password", "-w", "-s", &format!("{secret} Safe Storage"), "-a", secret])
+            .output()
+            .map_err(|e| e.to_string())?;
+        if !out.status.success() {
+            return Err(format!("{secret}'s key was not given out by the Keychain"));
+        }
+        Ok(out.stdout.trim_ascii_end().to_vec())
+    }
+}
 
 /// From database version 24, each decrypted value starts with the SHA-256 of its cookie's domain.
 const DOMAIN_HASH_VERSION: u32 = 24;
 
 struct Profile {
     cookies: PathBuf,
-    keyring_app: &'static str,
+    secret: &'static str,
 }
 
 /// Cookie files of every Chromium-family profile, newest first.
 fn profiles(home: &Path) -> Vec<Profile> {
-    let mut found: Vec<(SystemTime, Profile)> = BROWSERS
+    let mut found: Vec<(SystemTime, Profile)> = os::BROWSERS
         .iter()
-        .filter_map(|(dir, app)| Some((std::fs::read_dir(home.join(".config").join(dir)).ok()?, *app)))
+        .filter_map(|(dir, app)| Some((std::fs::read_dir(home.join(os::DATA).join(dir)).ok()?, *app)))
         .flat_map(|(entries, app)| entries.flatten().map(move |e| (e.path(), app)))
         .flat_map(|(p, app)| [p.join("Network/Cookies"), p.join("Cookies")].map(|f| (f, app)))
         .filter_map(|(f, app)| {
             let modified = f.metadata().ok()?.modified().ok()?;
-            Some((modified, Profile { cookies: f, keyring_app: app }))
+            Some((modified, Profile { cookies: f, secret: app }))
         })
         .collect();
     found.sort_by(|a, b| b.0.cmp(&a.0));
     found.into_iter().map(|(_, p)| p).collect()
 }
 
-/// AES key for one encryption version. `v11` asks the keyring, which may show an unlock prompt.
-fn key(version: &[u8], keyring_app: &str) -> Result<[u8; 16], String> {
-    let password = match version {
-        b"v10" => b"peanuts".to_vec(),
-        b"v11" => {
-            let out = std::process::Command::new("secret-tool")
-                .args(["lookup", "application", keyring_app])
-                .output()
-                .map_err(|e| format!("Reading Chrome's key from the keyring needs secret-tool: {e}"))?;
-            if !out.status.success() || out.stdout.is_empty() {
-                return Err(format!("Chrome's key ({keyring_app}) was not found in the keyring"));
-            }
-            out.stdout
-        }
-        other => return Err(format!("Unknown Chrome cookie encryption {}", String::from_utf8_lossy(other))),
-    };
+/// AES key for one encryption version.
+fn key(version: &[u8], secret: &str) -> Result<[u8; 16], String> {
+    let password = os::password(version, secret)?;
     let mut key = [0u8; 16];
-    pbkdf2::pbkdf2_hmac::<sha1::Sha1>(&password, b"saltysalt", 1, &mut key);
+    pbkdf2::pbkdf2_hmac::<sha1::Sha1>(&password, b"saltysalt", os::ITERATIONS, &mut key);
     Ok(key)
 }
 
@@ -124,7 +165,7 @@ fn read_profile(profile: &Profile) -> Result<Vec<SavedCookie>, String> {
         } else {
             let version = &encrypted[..3];
             if key_for.as_ref().is_none_or(|(v, _)| v != version) {
-                key_for = Some((version.to_vec(), key(version, profile.keyring_app)?));
+                key_for = Some((version.to_vec(), key(version, profile.secret)?));
             }
             decrypt(&encrypted, &key_for.as_ref().unwrap().1, &host, db_version)?
         };

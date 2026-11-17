@@ -37,7 +37,7 @@
 
   const detect = () =>
     attempt(() => invoke("import_browser_session")).then((ok) => {
-      if (!ok) error ??= "The browser session has expired. Open Bruin Learn in your browser, then try again.";
+      if (!ok) error ??= "Browser session expired, open canvas in your browser and try again";
     });
 
   const manual = () => attempt(() => ensureLogin("canvas"));
@@ -45,7 +45,7 @@
   // Restores the session stashed at the last logout — no browser needed.
   const resume = () =>
     attempt(() => invoke("resume_session")).then((ok) => {
-      if (!ok) error ??= "No saved session to log back in to. Log in manually instead.";
+      if (!ok) error ??= "No saved session to log back in to, log in manually instead";
     });
 
   // On launch: the session saved last time, then Firefox and Chrome. The menu only shows if both fail.
@@ -94,8 +94,6 @@
     font-weight: 700;
     letter-spacing: 0.12em;
     margin: 0 0 28px;
-    user-select: none;
-    -webkit-user-select: none;
   }
   .link {
     background: none;

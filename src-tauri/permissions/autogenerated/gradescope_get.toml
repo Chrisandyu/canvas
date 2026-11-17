@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-gradescope-get"
+description = "Enables the gradescope_get command without any pre-configured scope."
+commands.allow = ["gradescope_get"]
+
+[[permission]]
+identifier = "deny-gradescope-get"
+description = "Denies the gradescope_get command without any pre-configured scope."
+commands.deny = ["gradescope_get"]

@@ -32,9 +32,9 @@ const HOUR24_KEY = "hour24";
 
 export const datePrefs = $state({
   /** Month and day ("Sun, Nov 15, 23:59") or just weekday and time ("Sun 23:59"). */
-  full: localStorage.getItem(FULL_DATE_KEY) !== "false",
+  full: localStorage.getItem(FULL_DATE_KEY) === "true",
   /** "23:59" or "11:59 PM". */
-  hour24: localStorage.getItem(HOUR24_KEY) !== "false",
+  hour24: localStorage.getItem(HOUR24_KEY) === "true",
 });
 
 export function setFullDate(full: boolean): void {

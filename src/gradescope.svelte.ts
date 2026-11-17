@@ -45,7 +45,7 @@ function parse(html: string): Document {
 /** Course ids from the most recent term on the account page. */
 function courseIds(doc: Document): string[] {
   const term = doc.querySelector(".courseList--coursesForTerm");
-  if (!term) throw new Error("Gradescope account page layout changed");
+  if (!term) throw new Error("gradescope account page layout changed");
   return [...term.querySelectorAll<HTMLAnchorElement>("a.courseBox[href^='/courses/']")].map(
     (a) => a.getAttribute("href")!.split("/")[2],
   );
