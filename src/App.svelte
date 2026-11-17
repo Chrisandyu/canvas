@@ -75,7 +75,7 @@
     <span class="spacer"></span>
     {#if store.offline}<span class="offline">Offline · showing saved data</span>{/if}
     <UpdateButton />
-    <button class="exit" onclick={quit} title="Quit Canvas">Exit</button>
+    <button class="exit" onclick={quit}>Exit</button>
   </nav>
 
   <main>

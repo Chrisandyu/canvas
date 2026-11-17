@@ -6,6 +6,8 @@ import "./theme.css";
 import "./look.svelte";
 
 applyTheme(loadTheme());
+// No browser menu (Back, Reload, Inspect…) on right click anywhere in the app.
+window.addEventListener("contextmenu", (e) => e.preventDefault());
 try {
   mount(App, { target: document.body });
 } finally {

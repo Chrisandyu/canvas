@@ -9,7 +9,7 @@
 {:else if update.error}
   <span class="error">{update.error}</span>
 {:else if update.available}
-  <button class="text" onclick={installUpdate} title="Install version {update.available.version}">Update</button>
+  <button class="text" onclick={installUpdate}>Update</button>
 {/if}
 
 <style>
