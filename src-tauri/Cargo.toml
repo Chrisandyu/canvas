@@ -1,6 +1,6 @@
 [package]
 name = "canvas"
-version = "1.0.0"
+version = "1.0.1"
 description = "UCLA Canvas client"
 authors = ["you"]
 edition = "2024"
