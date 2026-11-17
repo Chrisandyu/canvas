@@ -3,7 +3,7 @@
   import PostList from "./PostList.svelte";
   import Tabs from "./Tabs.svelte";
   import type { Post } from "./api";
-  import { dashboardPrefs } from "./dashboard.svelte";
+  import { dashboardPrefs } from "./dashboardPrefs.svelte";
   import { courseCode, courseTitle, renameCourse } from "./names.svelte";
   import { assignmentsOf, store } from "./store.svelte";
   import { gradescope } from "./gradescope.svelte";

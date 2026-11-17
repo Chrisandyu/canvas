@@ -5,7 +5,7 @@
     connectGradescope,
     disconnectGradescope,
   } from "./gradescope.svelte";
-  import { dashboardPrefs, setDashboardPosts, setSeparateLater } from "./dashboard.svelte";
+  import { dashboardPrefs, setDashboardPosts, setSeparateLater } from "./dashboardPrefs.svelte";
   import { ACTIONS, bindParts, clickCombo, keyCombo, keys, resetBinds, setBind, type Action } from "./keys.svelte";
   import { SCALE_STEP, setScale, zoom } from "./zoom.svelte";
   import { MAX_BORDER, look, setLook } from "./look.svelte";
