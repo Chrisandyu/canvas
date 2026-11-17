@@ -1,8 +1,20 @@
 <script lang="ts">
   import { logout } from "./api";
-  import { gradescope, connectGradescope, disconnectGradescope } from "./gradescope.svelte";
-  import { datePrefs, setFullDate } from "./time.svelte";
+  import {
+    gradescope,
+    connectGradescope,
+    disconnectGradescope,
+    setUsesGradescope,
+    usesGradescope,
+  } from "./gradescope.svelte";
+  import { courseCode, courseTitle } from "./names.svelte";
+  import { sortCourses } from "./order.svelte";
+  import { store } from "./store.svelte";
+  import { datePrefs, setFullDate, setHour24, shortDate } from "./time.svelte";
   import { ACCENTS, FEATURED, defaultTheme, fetchScheme, listSchemes, loadTheme, saveTheme } from "./theme";
+
+  /** A due date for the format example; no zone, so it reads as local time. */
+  const SAMPLE_DUE = "2026-11-15T23:59:00";
 
   let theme = $state(loadTheme());
   let all = $state<string[]>([]);
@@ -54,10 +66,30 @@
   {/if}
 </div>
 
+<h2>Gradescope</h2>
+<p class="muted">
+    Submission status + scores for bruinlearn assignments that link to gradescope<br>If the assignment is only on gradescope its not added
+</p>
+{#each sortCourses(store.courses ?? []) as c (c.id)}
+  <label class="current panel toggle">
+    <span><span class="code">{courseCode(c) || "N/A"}</span> {courseTitle(c)}</span>
+    <input
+      type="checkbox"
+      checked={usesGradescope(c.id)}
+      onchange={(e) => setUsesGradescope(c.id, e.currentTarget.checked)}
+    />
+  </label>
+{/each}
+
 <h2>Due dates</h2>
+<p class="muted">Example: {shortDate(SAMPLE_DUE)}</p>
 <label class="current panel toggle">
-  <span>Show month and day <span class="muted">({datePrefs.full ? "Sun, Nov 15, 23:59" : "Sun 23:59"})</span></span>
+  <span>Show month and day</span>
   <input type="checkbox" checked={datePrefs.full} onchange={(e) => setFullDate(e.currentTarget.checked)} />
+</label>
+<label class="current panel toggle">
+  <span>24-hour time</span>
+  <input type="checkbox" checked={datePrefs.hour24} onchange={(e) => setHour24(e.currentTarget.checked)} />
 </label>
 
 <h2>Theme</h2>
@@ -108,6 +140,10 @@
     justify-content: space-between;
     align-items: center;
     padding: 12px var(--pad);
+  }
+  .code {
+    color: var(--accent);
+    margin-right: 6px;
   }
   .toggle {
     cursor: pointer;

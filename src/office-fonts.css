@@ -1,0 +1,54 @@
+/*
+ * Office documents mostly use Calibri, which only Windows and Office installs have. Carlito has the
+ * same letter widths, so text wraps and spaces exactly as in PowerPoint and Word. Installed Calibri
+ * is used when present. Carlito has no light weight, so "Calibri Light" (Office's heading font) uses
+ * the regular one.
+ */
+@font-face {
+  font-family: "Calibri";
+  src: local("Calibri"), url("./fonts/Carlito-Regular.ttf");
+  font-weight: 400;
+  font-style: normal;
+}
+@font-face {
+  font-family: "Calibri";
+  src: local("Calibri Bold"), url("./fonts/Carlito-Bold.ttf");
+  font-weight: 700;
+  font-style: normal;
+}
+@font-face {
+  font-family: "Calibri";
+  src: local("Calibri Italic"), url("./fonts/Carlito-Italic.ttf");
+  font-weight: 400;
+  font-style: italic;
+}
+@font-face {
+  font-family: "Calibri";
+  src: local("Calibri Bold Italic"), url("./fonts/Carlito-BoldItalic.ttf");
+  font-weight: 700;
+  font-style: italic;
+}
+@font-face {
+  font-family: "Calibri Light";
+  src: local("Calibri Light"), url("./fonts/Carlito-Regular.ttf");
+  font-weight: 400;
+}
+/* Aptos, Office's default since 2023, has no free copy; Carlito is the closest bundled match. */
+@font-face {
+  font-family: "Aptos";
+  src: local("Aptos"), url("./fonts/Carlito-Regular.ttf");
+  font-weight: 400;
+  font-style: normal;
+}
+@font-face {
+  font-family: "Aptos";
+  src: local("Aptos Bold"), url("./fonts/Carlito-Bold.ttf");
+  font-weight: 700;
+  font-style: normal;
+}
+@font-face {
+  font-family: "Aptos";
+  src: local("Aptos Italic"), url("./fonts/Carlito-Italic.ttf");
+  font-weight: 400;
+  font-style: italic;
+}

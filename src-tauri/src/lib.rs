@@ -4,7 +4,8 @@ mod firefox;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 use tauri::webview::{Cookie, PageLoadEvent};
 use tauri::{AppHandle, Emitter, Manager, Url, WebviewUrl, WebviewWindowBuilder};
 
@@ -387,42 +388,126 @@ async fn gradescope_get(
     Ok(body)
 }
 
-/// Opens a Canvas file in the system's default app. Each file is downloaded once into the cache,
-/// so later opens are instant and work offline.
-#[tauri::command]
-async fn open_file(app: AppHandle, client: tauri::State<'_, reqwest::Client>, id: u64) -> Result<(), String> {
-    let dir = app.path().app_cache_dir().map_err(|e| e.to_string())?.join("files");
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+/// Cached Canvas files are deleted once they haven't been opened for this long.
+const FILE_MAX_AGE: std::time::Duration = std::time::Duration::from_secs(30 * 24 * 60 * 60);
+
+fn files_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(app.path().app_cache_dir().map_err(|e| e.to_string())?.join("files"))
+}
+
+/// The saved copy of file `id`. Cached files are named `{id}-{display name}`.
+fn find_cached(dir: &Path, id: u64) -> Result<Option<PathBuf>, String> {
+    if !dir.exists() {
+        return Ok(None);
+    }
     let prefix = format!("{id}-");
-    let existing = std::fs::read_dir(&dir)
+    Ok(std::fs::read_dir(dir)
         .map_err(|e| e.to_string())?
         .flatten()
         .map(|f| f.path())
-        .find(|p| p.file_name().unwrap().to_string_lossy().starts_with(&prefix));
+        .find(|p| p.file_name().unwrap().to_string_lossy().starts_with(&prefix)))
+}
 
-    let path = match existing {
-        Some(p) => p,
-        None => {
-            let cookie = session_cookie(&app, Site::Canvas)?;
-            let url = format!("{}/api/v1/files/{id}", Site::Canvas.base());
-            let (meta, _) = canvas_page(&client, &cookie, &url).await?;
-            let name = meta["display_name"].as_str().ok_or("file has no name")?.replace(['/', '\0'], "_");
-            let download = meta["url"].as_str().ok_or("file has no download link")?;
-            // reqwest drops the Cookie header when Canvas redirects to its file storage host.
-            let res = client.get(download).header("Cookie", &cookie).send().await.map_err(send_error)?;
-            if !res.status().is_success() {
-                return Err(format!("Downloading {name} returned {}", res.status()));
-            }
-            let bytes = res.bytes().await.map_err(send_error)?;
-            let path = dir.join(format!("{prefix}{name}"));
-            // Write then rename, so a failed download never leaves a half file that looks complete.
-            let partial = dir.join(format!(".{prefix}partial"));
-            std::fs::write(&partial, &bytes).map_err(|e| e.to_string())?;
-            std::fs::rename(&partial, &path).map_err(|e| e.to_string())?;
-            path
+/// Marks a cached file as just opened, which keeps it from being pruned.
+fn touch(path: &Path) -> Result<(), String> {
+    std::fs::File::options()
+        .write(true)
+        .open(path)
+        .and_then(|f| f.set_modified(SystemTime::now()))
+        .map_err(|e| e.to_string())
+}
+
+/// Deletes cached files not opened within `FILE_MAX_AGE`, and downloads that never finished.
+fn prune_files(app: &AppHandle) -> Result<(), String> {
+    let dir = files_dir(app)?;
+    if !dir.exists() {
+        return Ok(());
+    }
+    for entry in std::fs::read_dir(&dir).map_err(|e| e.to_string())?.flatten() {
+        let partial = entry.file_name().to_string_lossy().ends_with("partial");
+        let modified = entry.metadata().and_then(|m| m.modified()).map_err(|e| e.to_string())?;
+        let stale = modified.elapsed().is_ok_and(|age| age > FILE_MAX_AGE);
+        if partial || stale {
+            std::fs::remove_file(entry.path()).map_err(|e| e.to_string())?;
         }
+    }
+    Ok(())
+}
+
+/// Path of the current version of a Canvas file in the cache. Canvas is asked for the file's name and
+/// size on every open, so a file the instructor replaced is downloaded again. Offline, the saved copy
+/// is used as it is.
+async fn cached_file(app: &AppHandle, client: &reqwest::Client, id: u64) -> Result<PathBuf, String> {
+    let dir = files_dir(app)?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let existing = find_cached(&dir, id)?;
+    let cookie = session_cookie(app, Site::Canvas)?;
+    let url = format!("{}/api/v1/files/{id}", Site::Canvas.base());
+    let meta = match canvas_page(client, &cookie, &url).await {
+        Ok((meta, _)) => meta,
+        Err(e) if e == OFFLINE && existing.is_some() => {
+            let path = existing.unwrap();
+            touch(&path)?;
+            return Ok(path);
+        }
+        Err(e) => return Err(e),
     };
-    tauri_plugin_opener::open_path(path, None::<&str>).map_err(|e| e.to_string())
+    let name = meta["display_name"].as_str().ok_or("file has no name")?.replace(['/', '\\', '\0'], "_");
+    let path = dir.join(format!("{id}-{name}"));
+    if let Some(old) = existing {
+        let size = std::fs::metadata(&old).map_err(|e| e.to_string())?.len();
+        if old == path && meta["size"].as_u64() == Some(size) {
+            touch(&path)?;
+            return Ok(path);
+        }
+        std::fs::remove_file(old).map_err(|e| e.to_string())?;
+    }
+    let download = meta["url"].as_str().ok_or("file has no download link")?;
+    // reqwest drops the Cookie header when Canvas redirects to its file storage host.
+    let res = client.get(download).header("Cookie", &cookie).send().await.map_err(send_error)?;
+    if !res.status().is_success() {
+        return Err(format!("Downloading {name} returned {}", res.status()));
+    }
+    let bytes = res.bytes().await.map_err(send_error)?;
+    // Write then rename, so a failed download never leaves a half file that looks complete.
+    let partial = dir.join(format!(".{id}-partial"));
+    std::fs::write(&partial, &bytes).map_err(|e| e.to_string())?;
+    std::fs::rename(&partial, &path).map_err(|e| e.to_string())?;
+    Ok(path)
+}
+
+/// Makes sure the current version of a Canvas file is cached and returns its name, for the viewer.
+#[tauri::command]
+async fn download_file(app: AppHandle, client: tauri::State<'_, reqwest::Client>, id: u64) -> Result<String, String> {
+    let path = cached_file(&app, &client, id).await?;
+    let file_name = path.file_name().unwrap().to_string_lossy();
+    Ok(file_name[format!("{id}-").len()..].to_string())
+}
+
+/// Contents of a file cached by `download_file`, sent as raw bytes rather than JSON.
+#[tauri::command]
+fn read_file(app: AppHandle, id: u64) -> Result<tauri::ipc::Response, String> {
+    let path = find_cached(&files_dir(&app)?, id)?.ok_or("file isn't downloaded")?;
+    Ok(tauri::ipc::Response::new(std::fs::read(path).map_err(|e| e.to_string())?))
+}
+
+/// Copies a cached file into the user's Downloads folder, adding " (2)" etc. if the name is taken.
+/// Returns where it was saved.
+#[tauri::command]
+fn save_file(app: AppHandle, id: u64) -> Result<String, String> {
+    let cached = find_cached(&files_dir(&app)?, id)?.ok_or("file isn't downloaded")?;
+    let name = cached.file_name().unwrap().to_string_lossy()[format!("{id}-").len()..].to_string();
+    let downloads = app.path().download_dir().map_err(|e| e.to_string())?;
+    let (stem, ext) = match name.rsplit_once('.') {
+        Some((stem, ext)) => (stem.to_string(), format!(".{ext}")),
+        None => (name.clone(), String::new()),
+    };
+    let target = (1..)
+        .map(|n| downloads.join(if n == 1 { name.clone() } else { format!("{stem} ({n}){ext}") }))
+        .find(|p| !p.exists())
+        .unwrap();
+    std::fs::copy(&cached, &target).map_err(|e| e.to_string())?;
+    Ok(target.display().to_string())
 }
 
 /// Last cached response body for a path, or null if never fetched.
@@ -439,6 +524,8 @@ fn cache_get(app: AppHandle, site: Site, path: String) -> Result<Option<String>,
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         // UCLA Canvas's firewall returns 403 for requests without a User-Agent.
         .manage(
             reqwest::Client::builder()
@@ -447,7 +534,8 @@ pub fn run() {
                 .build()
                 .unwrap(),
         )
-        .invoke_handler(tauri::generate_handler![login, logout, restore_session, resume_session, import_browser_session, api_get, gradescope_get, cache_get, open_file])
+        .setup(|app| Ok(prune_files(app.handle())?))
+        .invoke_handler(tauri::generate_handler![login, logout, restore_session, resume_session, import_browser_session, api_get, gradescope_get, cache_get, download_file, read_file, save_file])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

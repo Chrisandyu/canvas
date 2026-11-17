@@ -98,3 +98,19 @@ details > summary {
 }
 
 
+/* Embedded pages inside Canvas HTML (made by safeHtml). */
+.embed {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+}
+.embed iframe {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+}
+.embed a {
+  font-size: 0.9em;
+}

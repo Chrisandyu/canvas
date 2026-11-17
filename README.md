@@ -23,7 +23,7 @@ drag dmg in src-tauri/target/release/bundle/dmg/ to Applications
 sign the app if needed  
 `xattr -cr /Applications/Canvas.app`
 
-Windows
+Windows  
 idk if theres a package manager  
 [install visual studio build tools](https://visualstudio.microsoft.com/downloads/) (bottom of page under 2. tools for...) + [rust](https://rustup.rs/)  
 `npm run tauri build`  

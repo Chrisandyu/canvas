@@ -53,13 +53,6 @@
   .body :global(a) {
     color: var(--accent);
   }
-  .body :global(a.embed) {
-    display: inline-block;
-    padding: 10px 16px;
-    border: 1px solid var(--accent);
-    border-radius: var(--radius);
-    text-decoration: none;
-  }
   .body :global(table) {
     border-collapse: collapse;
   }

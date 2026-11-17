@@ -28,13 +28,23 @@ export function urgency(iso: string): Urgency {
 }
 
 const FULL_DATE_KEY = "fullDate";
+const HOUR24_KEY = "hour24";
 
-/** Whether dates show month and day ("Sun, Nov 15, 23:59") or just weekday and time ("Sun 23:59"). */
-export const datePrefs = $state({ full: localStorage.getItem(FULL_DATE_KEY) !== "false" });
+export const datePrefs = $state({
+  /** Month and day ("Sun, Nov 15, 23:59") or just weekday and time ("Sun 23:59"). */
+  full: localStorage.getItem(FULL_DATE_KEY) !== "false",
+  /** "23:59" or "11:59 PM". */
+  hour24: localStorage.getItem(HOUR24_KEY) !== "false",
+});
 
 export function setFullDate(full: boolean): void {
   datePrefs.full = full;
   localStorage.setItem(FULL_DATE_KEY, String(full));
+}
+
+export function setHour24(hour24: boolean): void {
+  datePrefs.hour24 = hour24;
+  localStorage.setItem(HOUR24_KEY, String(hour24));
 }
 
 export function shortDate(iso: string): string {
@@ -43,6 +53,6 @@ export function shortDate(iso: string): string {
     ...(datePrefs.full && { month: "short", day: "numeric" }),
     hour: "2-digit",
     minute: "2-digit",
-    hour12: false,
+    hour12: !datePrefs.hour24,
   });
 }

@@ -126,13 +126,6 @@
   .description :global(a) {
     color: var(--accent);
   }
-  .description :global(a.embed) {
-    display: inline-block;
-    padding: 10px 16px;
-    border: 1px solid var(--accent);
-    border-radius: var(--radius);
-    text-decoration: none;
-  }
   .description :global(table) {
     border-collapse: collapse;
   }

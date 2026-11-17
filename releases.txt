@@ -1,0 +1,5 @@
+git tag v1 && git push origin v1
+gh release create latest --title "v1" \
+  src-tauri/target/release/bundle/appimage/*.AppImage \
+  src-tauri/target/release/bundle/deb/*.deb \
+  src-tauri/target/release/bundle/rpm/*.rpm

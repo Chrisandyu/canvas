@@ -23,6 +23,21 @@ export const gradescope = $state({
 
 const BASE = "https://www.gradescope.com";
 
+const OFF_KEY = "gradescopeOff";
+
+/** Canvas course ids whose Gradescope status and scores are ignored, set in Settings. */
+const off = $state<number[]>(JSON.parse(localStorage.getItem(OFF_KEY) ?? "[]"));
+
+export function usesGradescope(courseId: number): boolean {
+  return !off.includes(courseId);
+}
+
+export function setUsesGradescope(courseId: number, on: boolean): void {
+  if (on) off.splice(off.indexOf(courseId), 1);
+  else off.push(courseId);
+  localStorage.setItem(OFF_KEY, JSON.stringify(off));
+}
+
 function parse(html: string): Document {
   return new DOMParser().parseFromString(html, "text/html");
 }

@@ -33,6 +33,15 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDY2NkU3MzRBNkY1MkY3RDMKUldUVDkxSnZTbk51WnI4T0RVR3VmTUZTMk5qdTdTQlRrNFB0Ym1mZDBCZGE4RlZwVTZCT1ZYYkMK",
+      "endpoints": [
+        "https://github.com/Chrisandyu/canvas/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

@@ -8,11 +8,17 @@
     "build": "vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "install-app": "tauri build --no-bundle && install -Dm755 src-tauri/target/release/canvas ~/.local/bin/canvas"
+    "install-app": "tauri build --no-bundle && install -Dm755 src-tauri/target/release/canvas ~/.local/bin/canvas",
+    "release": "bash scripts/release.sh"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-opener": "^2.7.2"
+    "@tauri-apps/plugin-opener": "^2.7.2",
+    "@tauri-apps/plugin-process": "^2.4.0",
+    "@tauri-apps/plugin-updater": "^2.14.1",
+    "docx-preview": "^0.4.1",
+    "pdfjs-dist": "^6.5.438",
+    "pptx-preview": "^1.0.7"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.1",

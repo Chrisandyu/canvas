@@ -1,5 +1,5 @@
 import type { Assignment } from "./api";
-import { gradescope, normalizeName, type GsAssignment } from "./gradescope.svelte";
+import { gradescope, normalizeName, usesGradescope, type GsAssignment } from "./gradescope.svelte";
 import { clock } from "./time.svelte";
 
 const KEY = "doneMarks";
@@ -30,8 +30,12 @@ export function isMarked(id: number): boolean {
   return !!marks[id];
 }
 
-/** The Gradescope row for a Gradescope-linked Canvas assignment, matched by name. */
+/**
+ * The Gradescope row for a Gradescope-linked Canvas assignment, matched by name. Assignments that
+ * only exist on Gradescope are never pulled in: Canvas's groups and weights don't cover them.
+ */
 export function gradescopeFor(a: Assignment): GsAssignment | undefined {
+  if (!usesGradescope(a.course_id)) return undefined;
   if (!a.external_tool_tag_attributes?.url.includes("gradescope.com")) return undefined;
   return gradescope.byName[normalizeName(a.name)];
 }

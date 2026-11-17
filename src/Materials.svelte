@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import type { ModuleItem } from "./api";
   import { store } from "./store.svelte";
@@ -7,9 +6,6 @@
   let { courseId }: { courseId: number } = $props();
 
   let modules = $derived(store.modules[courseId]);
-  /** Item being downloaded, and the last download error. */
-  let opening = $state<number>();
-  let error = $state<string>();
 
   // Nerd Font (Font Awesome) icons per item type.
   const ICONS: Record<ModuleItem["type"], string> = {
@@ -23,18 +19,7 @@
     SubHeader: "",
   };
 
-  async function openFile(item: ModuleItem) {
-    opening = item.id;
-    error = undefined;
-    try {
-      await invoke("open_file", { id: item.content_id });
-    } catch (e) {
-      error = e === "offline" ? `${item.title} hasn't been downloaded yet and you're offline.` : String(e);
-    }
-    opening = undefined;
-  }
-
-  /** Assignments and pages open inside the app; files open in their default app; the rest in the browser. */
+  /** Assignments, pages and files open inside the app; the rest in the browser. */
   function open(item: ModuleItem) {
     switch (item.type) {
       case "Assignment":
@@ -44,7 +29,7 @@
         location.hash = `#/course/${courseId}/page/${encodeURIComponent(item.page_url!)}`;
         break;
       case "File":
-        openFile(item);
+        location.hash = `#/file/${item.content_id}`;
         break;
       case "ExternalUrl":
         openUrl(item.external_url!);
@@ -54,8 +39,6 @@
     }
   }
 </script>
-
-{#if error}<p class="error">{error}</p>{/if}
 
 {#if !modules}
   <p class="muted">Loading…</p>
@@ -73,7 +56,6 @@
                 <button class="item" onclick={() => open(item)}>
                   <span class="icon">{ICONS[item.type]}</span>
                   <span class="title">{item.title}</span>
-                  {#if opening === item.id}<span class="muted">Downloading…</span>{/if}
                 </button>
               {/if}
             </li>

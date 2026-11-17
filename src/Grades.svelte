@@ -7,13 +7,12 @@
   import { gradescopeFor, scoreOf } from "./status.svelte";
 
   let rows = $derived(
-    sortCourses(store.courses ?? [])
-      .filter((c) => store.groups[c.id]?.some((g) => g.assignments.length))
-      .map((c) => ({
-        c,
-        result: courseGrade(c, store.groups[c.id], scoreOf),
-        official: officialScore(c),
-      })),
+    // Every course is listed, including ones with no assignments on Canvas.
+    sortCourses(store.courses ?? []).map((c) => ({
+      c,
+      result: courseGrade(c, store.groups[c.id] ?? [], scoreOf),
+      official: officialScore(c),
+    })),
   );
 
   // Graded by the instructor, but neither Canvas nor Gradescope shows the score yet.
@@ -47,6 +46,10 @@
         </summary>
 
         <div class="groups">
+          {#if store.errors[c.id]}<p class="error">{store.errors[c.id]}</p>{/if}
+          {#if !result.groups.some((g) => g.group.assignments.length)}
+            <p class="muted">No assignments on Bruin Learn.</p>
+          {/if}
           {#each result.groups as g (g.group.id)}
             <div class="group">
               <div class="group-head">
